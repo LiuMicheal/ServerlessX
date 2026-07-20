@@ -37,6 +37,7 @@ pub trait EndPoint {
     fn get_endpoint(&self) -> Arc<DatagramEndpoint>;
 }
 
+#[cfg(feature = "dct")]
 pub mod dc;
 pub mod rc;
 pub mod ud;

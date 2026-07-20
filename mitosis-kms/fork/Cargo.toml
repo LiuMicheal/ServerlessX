@@ -12,18 +12,19 @@ crate-type = ["staticlib"]
 test = false
 
 [features]
-default = ["mitosis","krdma-test",]
+default = ["legacy_dct", "krdma-test"]
 cow = ["mitosis/cow"]
 page-cache = ["mitosis/page-cache"]
 prefetch = ["mitosis/prefetch"]
 eager-resume = ["mitosis/eager-resume"]
 resume-profile = ["mitosis/resume-profile"]
-use_rc = ["mitosis/use_rc"]
+legacy_dct = ["mitosis/kernel", "mitosis/legacy_dct"]
+use_rc = ["mitosis/kernel", "mitosis/use_rc"]
 
 [dependencies]
 krdma-test = {path="../../deps/krcore/rust-kernel-rdma/krdma-test",optional = true}
 
-mitosis = {path = "../../mitosis", version="0.1.0", optional = true}
+mitosis = {path = "../../mitosis", version="0.1.0", optional = true, default-features = false}
 #mitosis = {path = "../../mitosis", version="0.1.0", optional = true, features = ["cow", "prefetch"]}
 #mitosis = {path = "../../mitosis", version="0.1.0", optional = true, features = ["cow","eager-resume"]}
 #mitosis = {path = "../../mitosis", version="0.1.0", optional = true, features = ["cow", "resume-profile"]}

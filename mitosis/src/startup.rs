@@ -36,11 +36,17 @@ pub fn check_global_configurations() {
         crate::log::info!("[check]: Not cache remote page table.")
     }
 
-    if cfg!(feature = "use_rc") {
-        crate::log::info!("[check]: Use RDMA's reliable connection for communications.")
-    } else {
-        crate::log::info!("[check]: Use RDMA's dynamic connected transport for communications.")
-    }
+    #[cfg(feature = "use_rc")]
+    crate::log::info!("[check]: Use RDMA reliable connections for the data plane.");
+
+    #[cfg(feature = "legacy_dct")]
+    crate::log::info!("[check]: Use the legacy dynamic-connected data plane.");
+
+    crate::log::info!(
+        "MITOSIS_EVENT version=1 event=transport_config status=ok control={} data={}",
+        crate::CONTROL_TRANSPORT,
+        crate::DATA_TRANSPORT
+    );
 
     crate::log::info!("********* All configuration check passes !*********");
 }
@@ -73,6 +79,7 @@ pub fn init_mitosis(config: &crate::Config) -> core::option::Option<()> {
         crate::ud_factories::init(ud_factories);
     };
 
+    #[cfg(feature = "legacy_dct")]
     // DC factory
     unsafe {
         use os_network::rdma::dc::*;
@@ -123,6 +130,7 @@ pub fn init_mitosis(config: &crate::Config) -> core::option::Option<()> {
     }
 
 
+    #[cfg(feature = "legacy_dct")]
     // DCQP & target pool
     unsafe {
         crate::dc_pool_service::init(
@@ -219,6 +227,7 @@ pub fn end_instance() {
     crate::log::info!("Stop MITOSIS instance, start cleaning up...");
     unsafe {
         crate::ud_factories::drop();
+        #[cfg(feature = "legacy_dct")]
         crate::dc_factories::drop();
         #[cfg(feature = "use_rc")]
         crate::rc_factories::drop();
@@ -229,15 +238,20 @@ pub fn end_instance() {
         crate::rc_pool::drop();
 
         crate::service_rpc::drop();
+        #[cfg(feature = "legacy_dct")]
         crate::access_info_service::drop();
 
+        #[cfg(feature = "legacy_dct")]
         crate::log::debug!("drop dc targets");
+        #[cfg(feature = "legacy_dct")]
         crate::dc_target_service::drop();
 
+        #[cfg(feature = "legacy_dct")]
         crate::log::debug!("drop dc pool");
+        #[cfg(feature = "legacy_dct")]
         crate::dc_pool_service::drop();
 
-        #[cfg(feature = "prefetch")]
+        #[cfg(all(feature = "legacy_dct", feature = "prefetch"))]
         crate::dc_pool_service_async::drop();
 
         crate::service_caller_pool::drop();

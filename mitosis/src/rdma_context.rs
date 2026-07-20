@@ -1,8 +1,15 @@
 use alloc::vec::Vec;
 
-use os_network::{KRdmaKit::{self, services::UnreliableDatagramAddressService, comm_manager::CMServer, services::dc::DCTargetService, services::rc::ReliableConnectionServer}, rdma::dc::DCFactory};
+use os_network::KRdmaKit::{
+    self, comm_manager::CMServer, services::UnreliableDatagramAddressService,
+};
+#[cfg(feature = "use_rc")]
+use os_network::KRdmaKit::services::rc::ReliableConnectionServer;
+#[cfg(feature = "legacy_dct")]
+use os_network::rdma::dc::DCFactory;
 
 pub const SERVICE_ID_BASE: u64 = 73; // not using 0 to prevent error
+#[cfg(feature = "legacy_dct")]
 pub const GLOBAL_DC_KEY: u64 = 73;
 pub const RC_SERVICE_ID_BASE: u64 = 33;
 
@@ -41,6 +48,7 @@ pub fn start_rdma(config: &crate::Config) -> core::option::Option<()> {
         crate::ud_service::init(ud_services);
     };
 
+    #[cfg(feature = "legacy_dct")]
     unsafe {
         let mut dc_targets = Vec::new();
         let mut dc_target_metas = Vec::new();
@@ -110,7 +118,9 @@ pub fn end_rdma() {
         crate::rc_service::drop();
         crate::rdma_cm_service::drop();
         crate::ud_service::drop();
+        #[cfg(feature = "legacy_dct")]
         crate::dc_target_meta::drop();
+        #[cfg(feature = "legacy_dct")]
         crate::dc_target::drop();
         crate::rdma_contexts::drop();
         crate::rdma_driver::drop();

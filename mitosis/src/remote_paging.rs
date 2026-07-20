@@ -1,8 +1,13 @@
+#[cfg(feature = "legacy_dct")]
 use alloc::sync::Arc;
-use os_network::KRdmaKit::{DatagramEndpoint, DatapathError};
+#[cfg(feature = "legacy_dct")]
+use os_network::KRdmaKit::DatagramEndpoint;
+use os_network::KRdmaKit::DatapathError;
 use os_network::remote_memory::Device;
-use os_network::remote_memory::rdma::{DCRemoteDevice, DCKeys, RCRemoteDevice, RCKeys};
-use os_network::rdma::rc::RCConn;
+#[cfg(feature = "legacy_dct")]
+use os_network::remote_memory::rdma::{DCKeys, DCRemoteDevice};
+#[cfg(feature = "use_rc")]
+use os_network::remote_memory::rdma::{RCKeys, RCRemoteDevice};
 use os_network::timeout::Timeout;
 use os_network::{block_on, Future};
 
@@ -19,18 +24,29 @@ pub const TIMEOUT_USEC: i64 = 1000_000; // 1s
 /// This structure is aimed for global usage
 #[derive(Debug)]
 pub struct AccessInfo {
+    #[cfg(feature = "legacy_dct")]
     pub(crate) access_handler: Arc<crate::KRdmaKit::queue_pairs::DatagramEndpoint>,
     pub(crate) rkey: u32,
     pub(crate) mac_id : usize,
 }
 
 impl AccessInfo {
+    #[cfg(feature = "legacy_dct")]
     // FIXME: what if the context of the access info doesn't match the one 
     // in the core_id? 
     pub fn new(descriptor: &crate::descriptors::RDMADescriptor) -> core::option::Option<Self> {
         Self::new_with_port(descriptor, 1) // WTX: port is default to 1
     }
 
+    #[cfg(feature = "use_rc")]
+    pub fn new(descriptor: &crate::descriptors::RDMADescriptor) -> core::option::Option<Self> {
+        Some(Self {
+            rkey: descriptor.rkey,
+            mac_id: descriptor.mac_id,
+        })
+    }
+
+    #[cfg(feature = "legacy_dct")]
     pub fn new_with_port(descriptor: &crate::descriptors::RDMADescriptor, local_port: u8) -> core::option::Option<Self> {
         let factory = crate::random_select_dc_factory_on_core()?;
         // FIXME: get from global (mapping from gid into ah)
@@ -83,7 +99,7 @@ use crate::remote_mapping::PhysAddr;
 use os_network::msg::UDMsg as RMemory;
 
 impl RemotePagingService {
-    #[cfg(not(feature = "use_rc"))]
+    #[cfg(feature = "legacy_dct")]
     #[inline]
     pub(crate) fn remote_descriptor_fetch(
         d: crate::rpc_handlers::DescriptorLookupReply,
@@ -133,7 +149,7 @@ impl RemotePagingService {
         })
     }
 
-    #[cfg(not(feature = "use_rc"))]
+    #[cfg(feature = "legacy_dct")]
     /// read the remote physical addr `dst` to `src`, both expressed in physical address
     #[inline]
     pub fn remote_read(

@@ -1,18 +1,26 @@
 #[allow(unused_imports)]
 use crate::bindings::page;
 use crate::linux_kernel_module;
+#[cfg(any(feature = "prefetch", feature = "eager-resume"))]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+#[cfg(any(feature = "prefetch", feature = "eager-resume"))]
 use os_network::KRdmaKit::{MemoryRegion, DatapathError};
+#[cfg(any(feature = "prefetch", feature = "eager-resume"))]
 use os_network::rdma::payload::RDMAOp;
+#[cfg(any(feature = "prefetch", feature = "eager-resume"))]
 use os_network::rdma::payload::dc::DCReqPayload;
+#[cfg(any(feature = "prefetch", feature = "eager-resume"))]
 use os_network::timeout::TimeoutWRef;
 #[allow(unused_imports)]
+#[cfg(feature = "prefetch")]
 use core::sync::atomic::{compiler_fence, Ordering::SeqCst};
 
 use os_network::bytes::BytesMut;
 #[allow(unused_imports)]
+#[cfg(feature = "prefetch")]
 use os_network::future::{Async, Future};
+#[cfg(any(feature = "prefetch", feature = "eager-resume"))]
 use os_network::Conn;
 
 use super::rdma::RDMADescriptor;
@@ -22,8 +30,9 @@ use super::vma::VMADescriptor;
 #[allow(unused_imports)]
 use super::page_table::FlatPageTable;
 
-#[allow(unused_imports)]
-use crate::remote_mapping::{PageEntry, PhysAddr, RemotePageTable, RemotePageTableIter, VirtAddr};
+use crate::remote_mapping::{RemotePageTable, VirtAddr};
+#[cfg(feature = "prefetch")]
+use crate::remote_mapping::{PageEntry, PhysAddr, RemotePageTableIter};
 
 #[allow(unused_imports)]
 use super::parent::{CompactPageTable, Offset, Value};
@@ -174,6 +183,7 @@ impl ChildDescriptor {
         }
     }
 
+    #[cfg(feature = "eager-resume")]
     #[inline]
     #[allow(dead_code)]
     fn batch_read_remote_pages(

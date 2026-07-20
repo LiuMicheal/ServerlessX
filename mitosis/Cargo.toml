@@ -14,7 +14,9 @@ cc = "1.0"
 shlex = "0.1"
 
 [features]
-default = ["os-network", "rust-kernel-linux-util", "rust-kernel-rdma-base"]
+default = ["kernel", "legacy_dct"]
+kernel = ["os-network", "rust-kernel-linux-util", "rust-kernel-rdma-base"]
+legacy_dct = ["os-network/dct"]
 cow = []           # use CoW strategy when prepare parent VMA ; or else copying user pages into kernel.
 eager-resume = [] # use eager page-fetching strategy instead of fetching while page fault
 resume-profile = [] # peak resume running profile
@@ -24,14 +26,14 @@ use_rc = []
 
 [dependencies]
 mitosis-protocol = { path = "../mitosis-user-libs/mitosis-protocol" }
-os-network = { path = "../os-network", optional = true, features = ["dct"] }
+os-network = { path = "../os-network", optional = true, default-features = false }
 rust-kernel-linux-util = { path = "../deps/krcore/rust-kernel-rdma/rust-kernel-linux-util", optional = true, features = ["static_log_check", "max_level_trace"] }
 rust-kernel-rdma-base = {path = "../deps/krcore/rust-kernel-rdma/rust-kernel-rdma-base",optional = true}
 thiserror-no-std = "2.0.2"
 mitosis-macros = { path = "../mitosis-macros" }
 bitflags = "1"
 hashbrown = {features=["raw"], path="../deps/hashbrown"}
-x86_64 = {}
+x86_64 = "=0.14.9"
 cfg-if = "0.1"
 static_assertions = "1.1.0"
 

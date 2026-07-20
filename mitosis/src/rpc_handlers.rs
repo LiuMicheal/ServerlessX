@@ -29,11 +29,16 @@ pub(crate) struct DescriptorLookupReply {
     pub(crate) sz: usize,
     pub(crate) ready: bool,
 
-    // for remote dct access
+    #[cfg(feature = "legacy_dct")]
+    // for the legacy dynamic-connected data plane
     pub(crate) rkey: u32,
+    #[cfg(feature = "legacy_dct")]
     pub(crate) lid: u32,
+    #[cfg(feature = "legacy_dct")]
     pub(crate) gid: rust_kernel_rdma_base::ib_gid,
+    #[cfg(feature = "legacy_dct")]
     pub(crate) dct_num: u32,
+    #[cfg(feature = "legacy_dct")]
     pub(crate) dc_key: u64,
 
     #[cfg(feature = "use_rc")]
@@ -57,10 +62,14 @@ pub(crate) fn handle_descriptor_addr_lookup(input: &BytesMut, output: &mut Bytes
         return 0; // a null reply indicate that the we don't have the key
     }
 
+    #[cfg(feature = "legacy_dct")]
     let dc_target_idx = unsafe { crate::bindings::pmem_get_current_cpu()  as usize % (crate::dc_target::get_ref().len()) };
+    #[cfg(feature = "legacy_dct")]
     let dc_target = unsafe { crate::dc_target::get_ref().get(dc_target_idx).unwrap() };
 
+    #[cfg(feature = "legacy_dct")]
     let meta = unsafe { crate::dc_target_meta::get_ref().get(dc_target_idx).unwrap() };
+    #[cfg(feature = "legacy_dct")]
     let (lid, gid) = (meta.lid, meta.gid);
 
     #[cfg(feature = "use_rc")]
@@ -75,10 +84,15 @@ pub(crate) fn handle_descriptor_addr_lookup(input: &BytesMut, output: &mut Bytes
                 sz: len,
                 ready: true,
 
+                #[cfg(feature = "legacy_dct")]
                 rkey: dc_target.ctx().rkey(),
+                #[cfg(feature = "legacy_dct")]
                 lid: lid as u32,
+                #[cfg(feature = "legacy_dct")]
                 gid,
+                #[cfg(feature = "legacy_dct")]
                 dct_num: dc_target.dct_num(),
+                #[cfg(feature = "legacy_dct")]
                 dc_key: dc_target.dc_key(),
 
                 #[cfg(feature = "use_rc")]
@@ -92,10 +106,15 @@ pub(crate) fn handle_descriptor_addr_lookup(input: &BytesMut, output: &mut Bytes
                 sz: 0,
                 ready: false,
 
+                #[cfg(feature = "legacy_dct")]
                 rkey: 0,
+                #[cfg(feature = "legacy_dct")]
                 lid: 0,
+                #[cfg(feature = "legacy_dct")]
                 gid: Default::default(),
+                #[cfg(feature = "legacy_dct")]
                 dct_num: 0,
+                #[cfg(feature = "legacy_dct")]
                 dc_key: 0,
                 
                 #[cfg(feature = "use_rc")]
@@ -107,4 +126,3 @@ pub(crate) fn handle_descriptor_addr_lookup(input: &BytesMut, output: &mut Bytes
     reply.serialize(output);
     reply.serialization_buf_len()
 }
-

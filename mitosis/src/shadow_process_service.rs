@@ -1,13 +1,11 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering::SeqCst;
 use core::sync::atomic::{compiler_fence};
 
 use hashbrown::HashMap;
-use os_network::rdma::dc::DCTarget;
-
 #[allow(unused_imports)]
 use crate::descriptors::{ChildDescriptor, RDMADescriptor};
+use crate::descriptors::rdma::TransportGuard;
 use crate::shadow_process::*;
 
 #[allow(unused_imports)]
@@ -23,12 +21,12 @@ struct ProcessBundler {
     serialized_buf: RMemory,
     serialized_buf_len: usize,
 
-    #[allow(dead_code)] // place holder to prevent NIC release the resources
-    bound_dc_targets: Vec<Arc<DCTarget>>,
+    #[allow(dead_code)] // keeps any transport-specific parent resource alive
+    transport_guards: Vec<TransportGuard>,
 }
 
 impl ProcessBundler {
-    fn new(process: ShadowProcess, targets: Arc<DCTarget>) -> Self {
+    fn new(process: ShadowProcess, transport_guard: TransportGuard) -> Self {
         let len = process.get_descriptor_ref().serialization_buf_len();
         crate::log::debug!(
             "Alloc serialization buf sz {} KB",
@@ -42,14 +40,14 @@ impl ProcessBundler {
 
         crate::log::debug!("Process bundle descriptor len: {}", buf.len());
 
-        let mut bound_targets = Vec::new();
-        bound_targets.push(targets);
+        let mut transport_guards = Vec::new();
+        transport_guards.push(transport_guard);
 
         Self {
             process: process,
             serialized_buf: buf,
             serialized_buf_len: len,
-            bound_dc_targets: bound_targets,
+            transport_guards,
         }
     }
 
@@ -95,11 +93,11 @@ impl ShadowProcessService {
             return None;
         }
 
-        let (target, descriptor) = RDMADescriptor::new_from_dc_target_pool()?;
+        let (transport_guard, descriptor) = RDMADescriptor::new_for_transport()?;
 
         let bundler = ProcessBundler::new(
             crate::shadow_process::ShadowProcess::new_copy(descriptor),
-            target,
+            transport_guard,
         );
         let ret = bundler.get_serialize_buf_sz();
 
@@ -119,11 +117,11 @@ impl ShadowProcessService {
             return None;
         }
 
-        let (target, descriptor) = RDMADescriptor::new_from_dc_target_pool()?;
+        let (transport_guard, descriptor) = RDMADescriptor::new_for_transport()?;
 
         let bundler = ProcessBundler::new(
             crate::shadow_process::ShadowProcess::new_cow(descriptor),
-            target,
+            transport_guard,
         );
         let ret = bundler.get_serialize_buf_sz();
 

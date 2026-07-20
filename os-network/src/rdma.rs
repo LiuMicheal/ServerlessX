@@ -52,6 +52,7 @@ pub struct ConnMeta {
     pub port: u8,
 }
 
+#[cfg(feature = "dct")]
 pub struct DCCreationMeta {
     pub port: u8,
 }
@@ -128,6 +129,7 @@ impl From<u32> for WCStatus {
     }
 }
 
+#[cfg(feature = "dct")]
 pub mod dc;
 pub mod payload;
 pub mod rc;

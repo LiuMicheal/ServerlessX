@@ -11,6 +11,18 @@ trait_alias
 extern crate alloc;
 extern crate static_assertions;
 
+#[cfg(all(feature = "use_rc", feature = "legacy_dct"))]
+compile_error!("select exactly one Mitosis data transport: use_rc or legacy_dct");
+
+#[cfg(not(any(feature = "use_rc", feature = "legacy_dct")))]
+compile_error!("a Mitosis data transport must be selected");
+
+#[cfg(all(
+    feature = "use_rc",
+    any(feature = "prefetch", feature = "eager-resume")
+))]
+compile_error!("prefetch and eager-resume are legacy DCT-only optimizations");
+
 use alloc::sync::Arc;
 use mitosis_macros::declare_global;
 
@@ -23,6 +35,13 @@ pub use rust_kernel_linux_util as log;
 pub use rust_kernel_rdma_base::linux_kernel_module;
 
 pub const VERSION: usize = 0;
+pub const CONTROL_TRANSPORT: &str = "ud";
+
+#[cfg(feature = "use_rc")]
+pub const DATA_TRANSPORT: &str = "use_rc";
+
+#[cfg(feature = "legacy_dct")]
+pub const DATA_TRANSPORT: &str = "legacy_dct";
 
 use alloc::vec::Vec;
 
@@ -67,6 +86,7 @@ pub struct Config {
     // gid is RDMA address
     pub peers_gid: Vec<alloc::string::String>,
 
+    #[cfg(feature = "legacy_dct")]
     pub init_dc_targets: usize,
 
     pub max_cluster_size: usize,
@@ -83,6 +103,7 @@ impl Default for Config {
             machine_id: 0,
             max_core_cnt: 48,
             peers_gid: Vec::new(),
+            #[cfg(feature = "legacy_dct")]
             init_dc_targets: 256,
             max_cluster_size: 128,
             mem_pool_size: 20,
@@ -130,6 +151,7 @@ impl Config {
         self.max_core_cnt
     }
 
+    #[cfg(feature = "legacy_dct")]
     pub fn set_init_dc_targets(&mut self, num: usize) -> &mut Self {
         self.init_dc_targets = num;
         self
@@ -184,11 +206,13 @@ declare_global!(
     alloc::vec::Vec<alloc::sync::Arc<crate::KRdmaKit::services::UnreliableDatagramAddressService>>
 );
 
+#[cfg(feature = "legacy_dct")]
 declare_global!(
     dc_target,
     alloc::vec::Vec<alloc::sync::Arc<crate::KRdmaKit::queue_pairs::DynamicConnectedTarget>>
 );
 
+#[cfg(feature = "legacy_dct")]
 declare_global!(
     dc_target_meta,
     alloc::vec::Vec<crate::KRdmaKit::services::DatagramMeta>
@@ -273,11 +297,13 @@ pub unsafe fn get_rc_factory_ref(
     crate::rc_factories::get_ref().get(nic_idx)
 }
 
+#[cfg(feature = "legacy_dct")]
 declare_global!(
     dc_factories,
     alloc::vec::Vec<os_network::rdma::dc::DCFactory>
 );
 
+#[cfg(feature = "legacy_dct")]
 #[inline]
 pub unsafe fn get_dc_factory_ref(
     nic_idx: usize,
@@ -285,6 +311,7 @@ pub unsafe fn get_dc_factory_ref(
     crate::dc_factories::get_ref().get(nic_idx)
 }
 
+#[cfg(feature = "legacy_dct")]
 #[inline]
 pub fn random_select_dc_factory_on_core(
 ) -> core::option::Option<&'static os_network::rdma::dc::DCFactory> {
@@ -353,26 +380,31 @@ pub unsafe fn get_rc_conn_pool_mut(
 }
 
 /// A pool of DCQPs
+#[cfg(feature = "legacy_dct")]
 pub mod dc_pool;
 pub mod remote_paging;
 
+#[cfg(feature = "legacy_dct")]
 declare_global!(dc_pool_service, crate::dc_pool::DCPool);
+#[cfg(feature = "legacy_dct")]
 declare_global!(dc_target_service, crate::dc_pool::DCTargetPool);
+#[cfg(feature = "legacy_dct")]
 declare_global!(access_info_service, crate::dc_pool::AccessInfoPool);
 
 
-#[cfg(feature = "prefetch")]
+#[cfg(all(feature = "legacy_dct", feature = "prefetch"))]
 type AsyncDCPool = lock_bundler::BoxedLockBundler<crate::dc_pool::DCPool>;
 
-#[cfg(feature = "prefetch")]
+#[cfg(all(feature = "legacy_dct", feature = "prefetch"))]
 declare_global!(dc_pool_service_async, crate::AsyncDCPool);
 
+#[cfg(feature = "legacy_dct")]
 #[inline]
 pub unsafe fn get_dc_pool_service_ref() -> &'static crate::dc_pool::DCPool {
     crate::dc_pool_service::get_ref()
 }
 
-#[cfg(feature = "prefetch")]
+#[cfg(all(feature = "legacy_dct", feature = "prefetch"))]
 #[inline]
 /// The DCQP for async prefetcher is cached in the async servcie pool
 /// This design avoid creating DCQP on the fly
@@ -380,16 +412,19 @@ pub unsafe fn get_dc_pool_async_service_ref() -> &'static crate::AsyncDCPool {
     crate::dc_pool_service_async::get_ref()
 }
 
+#[cfg(feature = "legacy_dct")]
 #[inline]
 pub unsafe fn get_dc_pool_service_mut() -> &'static mut crate::dc_pool::DCPool {
     crate::dc_pool_service::get_mut()
 }
 
+#[cfg(feature = "legacy_dct")]
 #[inline]
 pub unsafe fn get_accessinfo_service_mut() -> &'static mut crate::dc_pool::AccessInfoPool {
     crate::access_info_service::get_mut()
 }
 
+#[cfg(feature = "legacy_dct")]
 #[inline]
 pub unsafe fn get_dc_target_service_mut() -> &'static mut crate::dc_pool::DCTargetPool {
     crate::dc_target_service::get_mut()
@@ -448,6 +483,7 @@ pub mod descriptors;
 
 pub mod mem_pools;
 
+#[cfg(feature = "prefetch")]
 pub mod prefetcher;
 
 pub mod lock_bundler;

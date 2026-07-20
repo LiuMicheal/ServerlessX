@@ -1,5 +1,7 @@
+#[cfg(feature = "dct")]
 pub mod dc;
 pub mod rc;
+#[cfg(feature = "dct")]
 pub use dc::*;
 pub use rc::*;
 
