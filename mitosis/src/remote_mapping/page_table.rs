@@ -171,6 +171,7 @@ impl PageEntry {
     }
 }
 
+#[cfg(feature = "prefetch")]
 impl crate::prefetcher::NeedPrefetch for PageEntry {
     fn need_prefetch(&self) -> bool {
         self.addr.bottom_bit() == false

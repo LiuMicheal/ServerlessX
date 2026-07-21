@@ -30,9 +30,9 @@ use super::vma::VMADescriptor;
 #[allow(unused_imports)]
 use super::page_table::FlatPageTable;
 
-use crate::remote_mapping::{RemotePageTable, VirtAddr};
+use crate::remote_mapping::{PhysAddr, RemotePageTable, VirtAddr};
 #[cfg(feature = "prefetch")]
-use crate::remote_mapping::{PageEntry, PhysAddr, RemotePageTableIter};
+use crate::remote_mapping::{PageEntry, RemotePageTableIter};
 
 #[allow(unused_imports)]
 use super::parent::{CompactPageTable, Offset, Value};
