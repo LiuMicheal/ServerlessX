@@ -458,6 +458,19 @@ impl MitosisSysCallHandler {
                                 crate::log::error!("failed to lookup handler id: {:?}", handler_id);
                                 return -1;
                             }
+                            if d.sz == 0 || d.sz > crate::KRdmaKit::consts::MAX_KMALLOC_SZ {
+                                crate::log::error!(
+                                    "MITOSIS_EVENT version=1 event=fork_resume_remote status=error reason=descriptor_size machine_id={} remote_machine_id={} handler_id={} required={} capacity={} control={} data={}",
+                                    unsafe { *crate::mac_id::get_ref() },
+                                    machine_id,
+                                    handler_id,
+                                    d.sz,
+                                    crate::KRdmaKit::consts::MAX_KMALLOC_SZ,
+                                    crate::CONTROL_TRANSPORT,
+                                    crate::DATA_TRANSPORT
+                                );
+                                return -1;
+                            }
                             #[cfg(feature = "resume-profile")]
                             crate::log::info!("meta descriptor size:{} KB", d.sz / 1024);
 

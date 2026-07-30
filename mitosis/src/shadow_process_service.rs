@@ -26,7 +26,7 @@ struct ProcessBundler {
 }
 
 impl ProcessBundler {
-    fn new(process: ShadowProcess, transport_guard: TransportGuard) -> Self {
+    fn new(process: ShadowProcess, transport_guard: TransportGuard) -> core::option::Option<Self> {
         let len = process.get_descriptor_ref().serialization_buf_len();
         crate::log::debug!(
             "Alloc serialization buf sz {} KB",
@@ -35,7 +35,22 @@ impl ProcessBundler {
         let mut buf = unsafe { get_mem_pool_mut() }.pop_one();
         crate::log::debug!("serialization buf allocation done!");
 
-        process.get_descriptor_ref().serialize(buf.get_bytes_mut());
+        if len == 0 || len > buf.len() {
+            crate::log::error!(
+                "descriptor serialization refused: required {}, capacity {}",
+                len,
+                buf.len()
+            );
+            return None;
+        }
+        if !process.get_descriptor_ref().serialize(buf.get_bytes_mut()) {
+            crate::log::error!(
+                "descriptor serialization failed: required {}, capacity {}",
+                len,
+                buf.len()
+            );
+            return None;
+        }
         compiler_fence(SeqCst);
 
         crate::log::debug!("Process bundle descriptor len: {}", buf.len());
@@ -43,16 +58,16 @@ impl ProcessBundler {
         let mut transport_guards = Vec::new();
         transport_guards.push(transport_guard);
 
-        Self {
+        Some(Self {
             process: process,
             serialized_buf: buf,
             serialized_buf_len: len,
             transport_guards,
-        }
+        })
     }
 
     fn get_serialize_buf_sz(&self) -> usize {
-        self.serialized_buf.len()
+        self.serialized_buf_len
     }
 }
 
@@ -98,7 +113,7 @@ impl ShadowProcessService {
         let bundler = ProcessBundler::new(
             crate::shadow_process::ShadowProcess::new_copy(descriptor),
             transport_guard,
-        );
+        )?;
         let ret = bundler.get_serialize_buf_sz();
 
         self.registered_processes.insert(key, bundler);
@@ -122,7 +137,7 @@ impl ShadowProcessService {
         let bundler = ProcessBundler::new(
             crate::shadow_process::ShadowProcess::new_cow(descriptor),
             transport_guard,
-        );
+        )?;
         let ret = bundler.get_serialize_buf_sz();
 
         self.registered_processes.insert(key, bundler);
