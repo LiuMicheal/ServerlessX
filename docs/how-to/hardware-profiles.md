@@ -22,10 +22,17 @@ stop both roles. The bootstrap does not download or install these inputs.
 
 ## RDMA DMA-BUF
 
-The native RDMA profile additionally needs a kernel and driver combination that
+The included native source can be compiled without running it:
+
+```bash
+make spd-gdr
+```
+
+The native RDMA deployment additionally needs a kernel and driver combination that
 supports both CUDA DMA-BUF export and the selected RDMA provider, an authorized
 device/GID, exact ABI-compatible libraries, and isolation from other jobs. A
-device listed by `lspci` or `nvidia-smi` is insufficient evidence.
+successful build or a device listed by `lspci`/`nvidia-smi` is insufficient
+execution evidence.
 
 ## PhoenixOS lab
 

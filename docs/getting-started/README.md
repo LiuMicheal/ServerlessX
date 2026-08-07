@@ -45,9 +45,9 @@ question and is useful precisely because its claim boundary is explicit.
 ## Tests before code changes
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+make test
 ```
 
-The test suite is intentionally runnable with the standard library. External
-frameworks are needed only by the future real-model runner and are not silently
-installed by the CLI.
+The portable test suite uses the Python standard library plus a Linux C compiler
+and GNU Make. It does not require `fork.ko`, CUDA, or RDMA. External model and
+hardware frameworks are not silently installed by the CLI.

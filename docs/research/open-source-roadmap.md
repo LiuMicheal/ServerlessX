@@ -8,7 +8,10 @@ larger public project.
 
 - CPU SPD contract simulation and standard-library tests.
 - TinyLlama CUDA/TCP implementation source with hardware-free tests.
-- Profile declarations for future CUDA, RDMA DMA-BUF, and PhOS work.
+- C++ native DMA-BUF GDR source and build rules.
+- C remote-fork userspace boundary with injected-I/O tests.
+- External backend records for Mitosis and PhOS.
+- Profile declarations for CUDA, RDMA DMA-BUF, and PhOS deployment work.
 - Provenance and licensing records with external source excluded.
 
 ## Public release gate

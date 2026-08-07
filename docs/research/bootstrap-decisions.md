@@ -10,8 +10,9 @@ It is not a claim that every historical experiment has been published.
   automated agent.
 - Also provide machine-readable profiles, JSON command output, `AGENTS.md`, and
   a repository-local skill so an agent can help an operator safely.
-- Keep the canonical checkout and future migration work on the newer `gpu01`
-  environment rather than treating the older `gpu2` host as the project home.
+- Keep the canonical checkout and future migration work on the newer primary
+  GPU environment rather than treating the older experiment host as the
+  project home.
 
 ## First runnable boundary
 

@@ -1,7 +1,8 @@
 # Release checklist
 
 This directory is a placeholder for a future release process. A release must
-not be cut from the private bootstrap merely because the CPU command passes.
+not be cut from the private development snapshot merely because CPU/C tests or
+the native build pass.
 
 Before public release, complete:
 

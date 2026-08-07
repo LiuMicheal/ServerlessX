@@ -4,27 +4,34 @@
   "title": "RDMA with CUDA DMA-BUF",
   "system": "spd",
   "tier": "portable",
-  "maturity": "planned",
+  "maturity": "source-preview",
   "priority": 30,
   "available": false,
-  "unavailable_reason": "The public DMA-BUF deployment and verification workflow is not included yet.",
-  "description": "Reserved for direct GPU-memory transfer over an RDMA-capable fabric.",
+  "unavailable_reason": "Native source and build rules are included, but the public hardware deployment and evidence workflow is not yet available.",
+  "description": "Builds the direct CUDA VMM DMA-BUF data plane for an RDMA-capable fabric.",
   "requirements": {
     "python_min": "3.9",
     "commands": [
+      "c++",
+      "make",
       "nvidia-smi"
     ],
     "paths": [
-      "/sys/class/infiniband"
+      "/sys/class/infiniband",
+      "/usr/local/cuda/include/cuda.h"
     ]
   },
   "capabilities": [
     "cuda-dmabuf",
     "rdma-data-plane"
   ],
-  "workflow": [],
+  "workflow": [
+    "Compile the direct-only shared library and hardware probes with make spd-gdr",
+    "Run no transfer until an explicit deployment profile and evidence verifier are available"
+  ],
   "claims": [
-    "not executable in this bootstrap"
+    "native source and build rules are included",
+    "a successful build is not hardware execution evidence"
   ],
   "privileged_operations": []
 }

@@ -1,0 +1,22 @@
+{
+  "schema": "serverlessx.external-backend.v1",
+  "id": "mitosis",
+  "kind": "remote-fork-kernel",
+  "bundled": false,
+  "status": "external-only",
+  "upstream": "https://github.com/ProjectMitosisOS/mitosis-core.git",
+  "upstream_revision": "3f9f11af3a58b53646d27b79dbd2e91ea55bef2e",
+  "upstream_license": "MIT",
+  "integration_revisions": [
+    "7094c238990b19d81cfcefd9c58ce865581e5a7d",
+    "3cb43a0a528392d8499da65449c43c15013f8ef7"
+  ],
+  "build_artifact": "fork.ko",
+  "blocking_dependencies": [
+    {
+      "name": "KRCore",
+      "revision": "c0ca11582dc6937fc274e805fa696762d39e08f7",
+      "license": "NOASSERTION"
+    }
+  ]
+}

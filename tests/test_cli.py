@@ -25,6 +25,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual("phos_lab", plan["selected_profile"])
         self.assertIn("site-specific", plan["reason"])
 
+    def test_native_source_preview_is_not_an_executable_profile(self) -> None:
+        plan = cli.build_plan("rdma_dmabuf")
+        self.assertEqual("blocked", plan["status"])
+        self.assertEqual("rdma_dmabuf", plan["selected_profile"])
+        self.assertIn("deployment", plan["reason"])
+
     def test_cpu_run_and_verify_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             with mock.patch.dict(os.environ, {"SERVERLESSX_RUNS_DIR": temporary}):

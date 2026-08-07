@@ -59,10 +59,68 @@
       "rights_status": "Institutional and collaborator ownership review pending"
     },
     {
+      "id": "spd_native_gdr",
+      "included_paths": [
+        "native/spd-gdr/include/serverlessx/spd_gdr.h",
+        "native/spd-gdr/src/spd_gdr.cpp",
+        "native/spd-gdr/probes/vmm_dmabuf_gdr_checksum.cpp",
+        "native/spd-gdr/probes/vmm_staging_gdr.cpp"
+      ],
+      "source_repository": "https://github.com/LiuMicheal/serverlesspd.git",
+      "source_paths": [
+        "workloads/real-kv-gdr/serverlesspd_gdr.h",
+        "workloads/real-kv-gdr/serverlesspd_gdr.cpp",
+        "workloads/vmm-dmabuf-gdr-checksum/vmm_dmabuf_gdr_checksum.cpp",
+        "workloads/vmm-staging-gdr/vmm_staging_gdr.cpp"
+      ],
+      "observed_revisions": {
+        "header": "854d5b6a941802ee0de4c8895150e8ff25d4537c",
+        "library": "3a8dab272251d74cd6dd9fd4c17ec642c16348bb",
+        "direct_probe": "4d2f829bc0b11301d78c4e23446598027562cd07",
+        "staging_probe": "a2b283949b3b4e1c4802f23ccff2da38e4de10ee"
+      },
+      "observed_author": "Mingxuan Liu <28081065+LiuMicheal@users.noreply.github.com>",
+      "file_license": "Apache-2.0",
+      "license_basis": "Each imported C++ file contains an Apache-2.0 SPDX identifier.",
+      "bootstrap_changes": [
+        "public include namespace",
+        "RFC 5737 example endpoint",
+        "direct-only Make build without a bundled Mooncake dependency"
+      ],
+      "authorship_assessment": "High-confidence author-origin candidate from single-author Git history; no imported file has an identical Git blob in the audited PhoenixOS or Mitosis trees.",
+      "rights_status": "File-level Apache-2.0 marker present; institutional ownership review pending"
+    },
+    {
+      "id": "rfork_userspace_runtime",
+      "included_paths": [
+        "runtime/rfork/include/serverlessx/rfork_runtime.h",
+        "runtime/rfork/src/rfork_runtime.c",
+        "runtime/rfork/tests/test_rfork_runtime.c"
+      ],
+      "source_repository": "https://github.com/LiuMicheal/serverlesspd.git",
+      "source_paths": [
+        "components/rfork-runtime/include/serverlesspd/rfork_runtime.h",
+        "components/rfork-runtime/src/rfork_runtime.c",
+        "tests/rfork-runtime/test_rfork_runtime.c"
+      ],
+      "observed_revision": "d4215430d49ceddebc1d0052e82e2c7bf8dffb94",
+      "observed_author": "Mingxuan Liu <28081065+LiuMicheal@users.noreply.github.com>",
+      "file_license": "NOASSERTION",
+      "license_basis": "The imported C files had no SPDX or copyright header in the source repository.",
+      "bootstrap_changes": [
+        "public include namespace",
+        "portable Make build and hardware-free test target"
+      ],
+      "authorship_assessment": "High-confidence author-origin candidate from a single introduction commit; no imported file has an identical Git blob in the audited PhoenixOS or Mitosis trees.",
+      "rights_status": "Institutional and project-wide licensing review pending"
+    },
+    {
       "id": "serverlessx_bootstrap_layer",
       "included_paths": [
         "src/serverlessx/cli.py",
+        "Makefile",
         "sx",
+        "backends/",
         "profiles/",
         "testkit/",
         "docs/",

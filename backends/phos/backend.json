@@ -1,0 +1,18 @@
+{
+  "schema": "serverlessx.external-backend.v1",
+  "id": "phos",
+  "kind": "gpu-checkpoint-restore",
+  "bundled": false,
+  "status": "external-only",
+  "upstream": "https://github.com/SJTU-IPADS/PhoenixOS.git",
+  "upstream_revision": "82eb37da27a5ed0d06c699b4e3119818b9f3eb44",
+  "upstream_license": "Apache-2.0",
+  "integration_revision": "e22a14a1c407b3fa7f93d5b6f7534f100b96764e",
+  "blocking_dependencies": [
+    {
+      "name": "PhoenixOS-Remoting",
+      "revision": "c46b042720639d4c356c2ae4cfe419cc5d9eab32",
+      "license": "NOASSERTION"
+    }
+  ]
+}

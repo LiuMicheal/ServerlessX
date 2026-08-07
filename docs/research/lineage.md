@@ -5,11 +5,12 @@ projects it studies. The current private work grew from experiments around
 serverless prefill/decode execution, GPU state movement, remote fork/recovery,
 and lifecycle management.
 
-The bootstrap keeps only the newly arranged SPD contract and TinyLlama workload
-source needed to make that boundary reviewable. Historical experiment trees
-remain reference material in their original controlled workspaces. No
-PhoenixOS, PhoenixOS-Remoting, KRCore, Mitosis, Mooncake, kernel module, DSO,
-VM image, patch series, or generated build product is copied here.
+The repository keeps the newly arranged SPD contract, TinyLlama workload, owned
+native GDR source, and owned C remote-fork userspace boundary needed to make
+that boundary reviewable. Historical experiment trees remain reference material
+in their original controlled workspaces. No PhoenixOS, PhoenixOS-Remoting,
+KRCore, Mitosis, Mooncake, kernel module, VM image, patch series, or generated
+build product is copied here.
 
 ## Relationship of components
 
@@ -17,6 +18,8 @@ VM image, patch series, or generated build product is copied here.
 ServerlessX orchestration
         |
    SPD contract ---- TinyLlama P/D workload
+        |                    |
+   C rfork ABI         C++ native GDR
         |
   future SRec / SLSM interfaces
         |
@@ -28,5 +31,7 @@ the portable contract to avoid silently changing the experiment wire format.
 They should not be presented as a generic public API until a versioned SPI and
 converter are designed.
 
-For exact upstream URLs, revisions, license observations, and whether anything
-is bundled, see [provenance/upstreams.json](../../provenance/upstreams.json).
+For exact included-code origins, see
+[provenance/included-code.json](../../provenance/included-code.json). For
+external URLs, revisions, license observations, and whether anything is bundled,
+see [provenance/upstreams.json](../../provenance/upstreams.json).

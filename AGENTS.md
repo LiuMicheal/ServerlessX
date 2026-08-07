@@ -40,6 +40,10 @@ not upgrade a profile's maturity or executable status.
 ## Layout
 
 - `src/serverlessx/`: implementation; keep the portable path Python 3.9+.
+- `native/spd-gdr/`: C++ direct GDR source; builds are not hardware evidence.
+- `runtime/rfork/`: C userspace runtime; tests do not emulate `fork.ko`.
+- `backends/`: external source identity and license boundaries; source is not
+  bundled here.
 - `tests/`: standard-library `unittest` suite.
 - `profiles/`: machine-readable declarations with adjacent human guidance.
 - `systems/`: subsystem scope and claim boundaries.
@@ -71,6 +75,7 @@ Run from the repository root:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
+make test-rfork
 ./sx doctor --format json
 ./sx plan --profile cpu --format json
 ./sx run spd --profile cpu --format json

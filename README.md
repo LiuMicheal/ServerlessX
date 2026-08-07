@@ -6,10 +6,11 @@ ServerlessX is a research codebase for composing three serverless systems:
 - **SRec**: recovery mechanisms for serverless execution.
 - **SLSM**: lifecycle and state management for serverless workloads.
 
-This first private bootstrap makes the SPD contract inspectable and runnable on
-an ordinary CPU host. It also includes the TinyLlama CUDA/TCP workload source
-and its hardware-free tests. It does **not** yet claim that a fresh machine can
-run the GPU, RDMA, PhoenixOS, SRec, or SLSM paths.
+This private development snapshot makes the SPD contract inspectable and
+runnable on an ordinary CPU host. It also includes the owned C/C++ native GDR
+and remote-fork userspace boundaries plus hardware-free tests. It does **not**
+yet claim that a fresh machine can run the GPU, RDMA, PhoenixOS, SRec, or SLSM
+paths.
 
 ## Start here
 
@@ -23,6 +24,7 @@ cd ServerlessX
 ./sx plan --profile cpu
 ./sx run spd --profile cpu
 ./sx verify --latest
+make test
 ```
 
 The run writes a machine-readable result under `runs/`. The directory is local
@@ -35,7 +37,8 @@ for the expected flow and troubleshooting steps.
 | --- | --- | --- | --- |
 | SPD CPU contract simulation | Yes | Yes | Metadata validation, ordered acknowledgements, ownership transitions, and fail-closed protocol behavior |
 | TinyLlama CUDA/TCP workload | Yes | Not declared hardware-ready | Real prefill/decode implementation plus tests that use fakes and local sockets without CUDA hardware |
-| Native RDMA DMA-BUF | Profile only | No | Requirements and intended claim boundary only |
+| Native RDMA DMA-BUF | C++ source and build | Build only | CUDA VMM/DMA-BUF/native RC implementation; no hardware success claim |
+| Remote-fork userspace boundary | C source and tests | Tests only | Role token, ioctl, FD ownership, and fail-closed audit behavior; no kernel module |
 | PhoenixOS lab backend | Reference only | No | Historical experiment context only; no PhoenixOS, Remoting, KRCore, or Mitosis code is bundled |
 | SRec | Documentation placeholder | No | Planned ServerlessX subsystem boundary |
 | SLSM | Documentation placeholder | No | Planned ServerlessX subsystem boundary |
@@ -49,6 +52,8 @@ RDMA, or reproduce a PhoenixOS remote-fork experiment.
 - New user: read [the quickstart](QUICKSTART.md).
 - GPU/RDMA operator: read [hardware profiles](docs/how-to/hardware-profiles.md)
   before running anything.
+- Systems reader: start with [the architecture](docs/concepts/architecture.md)
+  and the [native GDR boundary](native/spd-gdr/README.md).
 - Research reader: start with [system lineage](docs/research/lineage.md),
   [included-code provenance](provenance/included-code.json), and
   [upstream provenance](provenance/upstreams.json).
@@ -59,6 +64,9 @@ RDMA, or reproduce a PhoenixOS remote-fork experiment.
 
 ```text
 src/serverlessx/       Executable Python package
+native/spd-gdr/        C++ CUDA DMA-BUF/RDMA data plane and probes
+runtime/rfork/         C remote-fork userspace ABI, runtime, and tests
+backends/              External Mitosis and PhOS identity records
 systems/               Human-readable SPD, SRec, and SLSM boundaries
 profiles/              Capability and deployment declarations
 deploy/                Deployment entry-point documentation
@@ -72,8 +80,8 @@ docs/                   Concepts, operations, references, and research notes
 
 Profiles are declarations, not promises. `./sx doctor` observes the host,
 `./sx plan` explains a proposed path, and only `./sx run` creates a run result.
-The bootstrap never installs a driver, loads a kernel module, changes a network
-interface, starts a VM, or invokes `sudo`.
+The repository never installs a driver, loads a kernel module, changes a
+network interface, starts a VM, or invokes `sudo` by itself.
 
 ## Using an AI coding agent
 
@@ -92,7 +100,10 @@ release. Until a license is committed, do not assume permission to use, modify,
 or redistribute this repository beyond access explicitly granted by its
 rights holders.
 
-External projects are identified for research provenance only. Their source,
+The files under `native/spd-gdr/` retain individual Apache-2.0 SPDX identifiers.
+The remaining repository, including the C rfork runtime, is still covered by
+the project-wide ownership and licensing review. External projects are
+identified for research provenance only. Their source,
 patches, binaries, models, and build products are not bundled here. In
 particular, PhoenixOS-Remoting and KRCore had no repository-root license at the
 revisions observed during this audit; they must not be copied into a release

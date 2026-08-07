@@ -63,11 +63,13 @@ state. Keep the reported result path when filing an issue.
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
+make test-rfork
 ```
 
-The tests cover the SPD contract and the TinyLlama prefill/decode workload with
-fake runtimes and local sockets. They do not require PyTorch, Transformers,
-CUDA, or a model checkpoint.
+The tests cover the SPD contract, TinyLlama prefill/decode workload, and C
+remote-fork userspace boundary with fake runtimes, local sockets, and injected
+I/O. They do not require PyTorch, Transformers, CUDA, a model checkpoint, or
+`fork.ko`. The C test requires a Linux C compiler and GNU Make.
 
 ## Let the repository choose
 

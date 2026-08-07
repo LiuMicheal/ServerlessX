@@ -6,11 +6,13 @@ redistribution terms are still under review. Until that review is complete,
 access to this private repository must not be interpreted as a license to copy,
 modify, publish, or redistribute it.
 
-The Python files in `src/` and `tests/` are an arranged research bootstrap.
-`included-code.json` records their observed Git origins and bootstrap changes,
-but their final ownership and release license still need to be confirmed with
-all relevant institutions and contributors. This document is a process
-boundary, not a grant of rights.
+`included-code.json` records the observed Git origins and bootstrap changes for
+the included Python, C, and C++ files. The C++ files under `native/spd-gdr/`
+retain their existing Apache-2.0 SPDX identifiers. The C files under
+`runtime/rfork/` had no file-level license marker at the audited source revision.
+The final ownership and release license for the repository still need to be
+confirmed with all relevant institutions and contributors. This document is a
+process boundary, not a grant of rights.
 
 ## External projects
 
