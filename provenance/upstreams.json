@@ -1,0 +1,74 @@
+{
+  "schema": "serverlessx.provenance.v1",
+  "generated_at": "2026-08-07",
+  "repository_status": "private_bootstrap",
+  "distribution_policy": {
+    "bundled_external_source": false,
+    "bundled_external_patches": false,
+    "bundled_external_binaries": false,
+    "bundled_models": false,
+    "note": "These records identify research inputs and are not permission to redistribute them."
+  },
+  "records": [
+    {
+      "id": "phoenixos",
+      "upstream": "https://github.com/SJTU-IPADS/PhoenixOS.git",
+      "revision": "82eb37da27a5ed0d06c699b4e3119818b9f3eb44",
+      "revision_kind": "upstream_base_observed_in_experiment_lock",
+      "declared_license": "Apache-2.0",
+      "license_confidence": "high",
+      "license_basis": "Repository-root LICENSE was present at the audited revision.",
+      "bundled": false,
+      "status": "reference_only",
+      "notes": "Local research topic commits and patches are not included in this bootstrap."
+    },
+    {
+      "id": "phoenixos_remoting",
+      "upstream": "https://github.com/SJTU-IPADS/PhoenixOS-Remoting.git",
+      "revision": "c46b042720639d4c356c2ae4cfe419cc5d9eab32",
+      "revision_kind": "upstream_base_observed_in_experiment_lock",
+      "declared_license": "NOASSERTION",
+      "license_confidence": "high",
+      "license_basis": "No repository-root LICENSE or COPYING file was observed at the audited revision; this is not a conclusion that no copyright exists.",
+      "bundled": false,
+      "status": "reference_only",
+      "notes": "Do not copy source, patches, Cargo artifacts, or binaries into a release without a separate rights review."
+    },
+    {
+      "id": "mitosis_core",
+      "upstream": "https://github.com/ProjectMitosisOS/mitosis-core.git",
+      "revision": "3f9f11af3a58b53646d27b79dbd2e91ea55bef2e",
+      "revision_kind": "upstream_base_observed_in_experiment_lock",
+      "declared_license": "MIT",
+      "license_confidence": "high",
+      "license_basis": "Repository-root LICENSE was observed in the audited checkout.",
+      "bundled": false,
+      "status": "reference_only",
+      "notes": "Research patches and kernel artifacts remain outside this repository."
+    },
+    {
+      "id": "krcore_artifacts_mitosis_submodule",
+      "upstream": "https://github.com/SJTU-IPADS/krcore-artifacts.git",
+      "revision": "c0ca11582dc6937fc274e805fa696762d39e08f7",
+      "revision_kind": "mitosis_submodule_base_observed_in_experiment_lock",
+      "declared_license": "NOASSERTION",
+      "license_confidence": "medium",
+      "license_basis": "The referenced checkout was identified, but this bootstrap has not received a distributable license grant for it.",
+      "bundled": false,
+      "status": "reference_only",
+      "notes": "Some later Cargo locks observed commit cbfc9b4407110a300f840ab348c3f07dda0e115d; neither revision is bundled."
+    },
+    {
+      "id": "mooncake",
+      "upstream": "https://github.com/kvcache-ai/Mooncake.git",
+      "revision": "f7330a6357471a76c4dce62be675fe690e09032e",
+      "revision_kind": "experiment_baseline_reference",
+      "declared_license": "Apache-2.0",
+      "license_confidence": "high",
+      "license_basis": "Repository licensing was recorded in the experiment dependency lock.",
+      "bundled": false,
+      "status": "optional_reference",
+      "notes": "The portable CPU path does not require Mooncake. Historical GDR experiments used additional pinned revisions and patches outside this bootstrap."
+    }
+  ]
+}

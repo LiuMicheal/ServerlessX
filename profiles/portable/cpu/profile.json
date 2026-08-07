@@ -1,0 +1,34 @@
+{
+  "schema": "serverlessx.profile.v1",
+  "id": "cpu",
+  "title": "Portable CPU contract simulation",
+  "system": "spd",
+  "tier": "portable",
+  "maturity": "executable",
+  "priority": 10,
+  "available": true,
+  "unavailable_reason": null,
+  "description": "Runs the SPD metadata, ACK-order, and ownership contract without GPUs or network transfer.",
+  "requirements": {
+    "python_min": "3.9",
+    "commands": [],
+    "paths": []
+  },
+  "capabilities": [
+    "metadata-validation",
+    "ack-order-validation",
+    "ownership-lifecycle-validation"
+  ],
+  "workflow": [
+    "Build and validate fixed TinyLlama experiment metadata",
+    "Replay the seven ordered SPD acknowledgements in memory",
+    "Release both simulated owners and write evidence"
+  ],
+  "claims": [
+    "contract simulation only",
+    "no KV payload transfer",
+    "no model inference",
+    "no GPU execution"
+  ],
+  "privileged_operations": []
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "serverlessx.profile.v1",
+  "id": "phos_lab",
+  "title": "PhOS laboratory backend",
+  "system": "spd",
+  "tier": "lab",
+  "maturity": "reference-only",
+  "priority": 40,
+  "available": false,
+  "unavailable_reason": "This profile depends on separately obtained laboratory components and site-specific integration.",
+  "description": "Documents the historical PhOS-backed research configuration without redistributing its external dependencies.",
+  "requirements": {
+    "python_min": "3.9",
+    "commands": [
+      "nvidia-smi"
+    ],
+    "paths": [
+      "/sys/class/infiniband"
+    ]
+  },
+  "capabilities": [
+    "laboratory-reference"
+  ],
+  "workflow": [],
+  "claims": [
+    "not executable in this bootstrap",
+    "external components are not bundled"
+  ],
+  "privileged_operations": [
+    "site-specific VM and kernel configuration"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "schema": "serverlessx.profile.v1",
+  "id": "rdma_dmabuf",
+  "title": "RDMA with CUDA DMA-BUF",
+  "system": "spd",
+  "tier": "portable",
+  "maturity": "planned",
+  "priority": 30,
+  "available": false,
+  "unavailable_reason": "The public DMA-BUF deployment and verification workflow is not included yet.",
+  "description": "Reserved for direct GPU-memory transfer over an RDMA-capable fabric.",
+  "requirements": {
+    "python_min": "3.9",
+    "commands": [
+      "nvidia-smi"
+    ],
+    "paths": [
+      "/sys/class/infiniband"
+    ]
+  },
+  "capabilities": [
+    "cuda-dmabuf",
+    "rdma-data-plane"
+  ],
+  "workflow": [],
+  "claims": [
+    "not executable in this bootstrap"
+  ],
+  "privileged_operations": []
+}

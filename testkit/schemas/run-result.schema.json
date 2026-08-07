@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://serverlessx.dev/schemas/run-result.v1.json",
+  "title": "ServerlessX run result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "status",
+    "system",
+    "profile",
+    "mode",
+    "started_at",
+    "finished_at",
+    "metadata",
+    "events",
+    "outcome",
+    "checks",
+    "claims"
+  ],
+  "properties": {
+    "schema": {"const": "serverlessx.run-result.v1"},
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "pattern": "^[0-9]{8}T[0-9]{6}\\.[0-9]{6}Z-[0-9a-f]{12}$"},
+    "status": {"const": "pass"},
+    "system": {"const": "spd"},
+    "profile": {"const": "cpu"},
+    "mode": {"const": "contract-simulation"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema", "schema_version", "request_id", "epoch", "attempt_id", "model_id", "model_sha256", "tokenizer_sha256", "prompt_digest_sha256", "first_token_id", "kv_layout", "dtype", "prompt_length", "output_tokens", "tensors", "payload_bytes", "payload_sha256", "source_owner_id", "target_owner_id", "buffer_id", "source_gpu_uuid", "target_gpu_uuid", "source_endpoint", "target_endpoint"]
+    },
+    "events": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"type": "object"}
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "closed", "owners"],
+      "properties": {
+        "state": {"const": "SOURCE_RELEASED"},
+        "closed": {"const": true},
+        "owners": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "target"],
+          "properties": {"source": {"const": false}, "target": {"const": false}}
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed_ack_sequence", "replay_rejected"],
+      "properties": {
+        "completed_ack_sequence": {
+          "const": ["TARGET_READY", "TRANSFER_SUBMITTED", "TRANSFER_COMPLETED", "CACHE_VERIFIED", "DECODE_DONE", "RELEASED", "SOURCE_RELEASED"]
+        },
+        "replay_rejected": {"const": true}
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_simulation", "kv_payload_transferred", "model_inference_performed", "gpu_execution_performed"],
+      "properties": {
+        "contract_simulation": {"const": true},
+        "kv_payload_transferred": {"const": false},
+        "model_inference_performed": {"const": false},
+        "gpu_execution_performed": {"const": false}
+      }
+    }
+  }
+}

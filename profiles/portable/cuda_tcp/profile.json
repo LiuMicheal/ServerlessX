@@ -1,0 +1,28 @@
+{
+  "schema": "serverlessx.profile.v1",
+  "id": "cuda_tcp",
+  "title": "CUDA over TCP",
+  "system": "spd",
+  "tier": "portable",
+  "maturity": "source-preview",
+  "priority": 20,
+  "available": false,
+  "unavailable_reason": "Bootstrap release does not yet provide a validated external deployment workflow.",
+  "description": "Reserved for the portable CUDA/TCP prefill-decode path.",
+  "requirements": {
+    "python_min": "3.9",
+    "commands": [
+      "nvidia-smi"
+    ],
+    "paths": []
+  },
+  "capabilities": [
+    "cuda-kv-cache",
+    "tcp-control-plane"
+  ],
+  "workflow": [],
+  "claims": [
+    "not executable in this bootstrap"
+  ],
+  "privileged_operations": []
+}

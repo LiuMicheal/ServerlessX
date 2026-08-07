@@ -1,0 +1,82 @@
+{
+  "schema": "serverlessx.included-code-provenance.v1",
+  "generated_at": "2026-08-07",
+  "purpose": "Record where code included in the private bootstrap came from; this is authorship evidence, not a legal ownership conclusion.",
+  "records": [
+    {
+      "id": "spd_contract",
+      "included_paths": [
+        "src/serverlessx/spd/contract.py",
+        "src/serverlessx/spd/__init__.py",
+        "tests/spd/test_contract.py"
+      ],
+      "source_repository": "https://github.com/LiuMicheal/serverlesspd.git",
+      "source_paths": [
+        "workloads/spd_contract/contract.py",
+        "workloads/spd_contract/__init__.py",
+        "tests/artifact/test_spd_contract.py"
+      ],
+      "observed_revision": "da9b45f48e3524727ffcaa809615ffceb36ccd01",
+      "observed_author": "Mingxuan Liu <28081065+LiuMicheal@users.noreply.github.com>",
+      "observed_date": "2026-07-22T17:23:48+08:00",
+      "bootstrap_changes": [
+        "normal package imports",
+        "Python 3.9-compatible annotations",
+        "transport-neutral module description",
+        "RFC 5737 fixture addresses"
+      ],
+      "authorship_assessment": "High-confidence author-origin candidate from single-author Git history and no observed third-party copyright header.",
+      "rights_status": "Institutional and collaborator ownership review pending"
+    },
+    {
+      "id": "tinyllama_pd_workload",
+      "included_paths": [
+        "src/serverlessx/spd/tinyllama_pd.py",
+        "src/serverlessx/spd/data/prompt-128.json",
+        "tests/spd/test_tinyllama_pd.py"
+      ],
+      "source_repository": "https://github.com/LiuMicheal/serverlesspd.git",
+      "source_paths": [
+        "workloads/real-pd-mvp/real_pd_mvp.py",
+        "workloads/real-pd-mvp/prompt-128.json",
+        "tests/artifact/test_real_pd_mvp.py"
+      ],
+      "observed_revisions": {
+        "implementation_and_tests": "37b0050402d6196d0941e1269db9aa7578470582",
+        "prompt_fixture": "d3bc223f2a5ecffce2a6ffc9caf778e8fa2427ee"
+      },
+      "observed_author": "Mingxuan Liu <28081065+LiuMicheal@users.noreply.github.com>",
+      "observed_dates": {
+        "implementation_and_tests": "2026-07-27T16:07:15+08:00",
+        "prompt_fixture": "2026-07-22T15:50:44+08:00"
+      },
+      "bootstrap_changes": [
+        "normal package imports",
+        "packaged prompt resource path",
+        "Python 3.9-compatible annotations"
+      ],
+      "authorship_assessment": "High-confidence author-origin candidate from single-author Git history and no observed third-party copyright header.",
+      "rights_status": "Institutional and collaborator ownership review pending"
+    },
+    {
+      "id": "serverlessx_bootstrap_layer",
+      "included_paths": [
+        "src/serverlessx/cli.py",
+        "sx",
+        "profiles/",
+        "testkit/",
+        "docs/",
+        "systems/",
+        ".agents/skills/serverlessx-deploy/"
+      ],
+      "source_repository": null,
+      "source_paths": [],
+      "observed_revision": null,
+      "bootstrap_changes": [
+        "created for the initial ServerlessX private bootstrap"
+      ],
+      "authorship_assessment": "New bootstrap material; no external source was intentionally bundled.",
+      "rights_status": "Initial commit and institutional ownership review pending"
+    }
+  ]
+}

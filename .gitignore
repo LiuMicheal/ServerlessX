@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+dist/
+build/
+
+# Generated ServerlessX state and evidence
+runs/
+.serverlessx/
+evidence/local/
+
+# Host-local configuration and secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.token
+inventory.local.*
+profile.local.*
+
+# Models, accelerators, native builds, and machine images
+models/
+checkpoints/
+*.safetensors
+*.pt
+*.pth
+*.gguf
+*.bin
+*.so
+*.a
+*.o
+*.ko
+*.qcow2
+*.img
+*.tar
+*.tar.gz
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store

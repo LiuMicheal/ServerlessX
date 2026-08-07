@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deploy ServerlessX"
+  short_description: "Probe hardware and run a ServerlessX profile"
+  default_prompt: "Use $serverlessx-deploy to probe this host and run the strongest safe ServerlessX profile."

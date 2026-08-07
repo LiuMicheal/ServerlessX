@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+SERVERLESSX_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+export SERVERLESSX_ROOT
+
+if [ -n "${PYTHONPATH:-}" ]; then
+    PYTHONPATH="$SERVERLESSX_ROOT/src:$PYTHONPATH"
+else
+    PYTHONPATH="$SERVERLESSX_ROOT/src"
+fi
+export PYTHONPATH
+
+exec "${SERVERLESSX_PYTHON:-python3}" -m serverlessx "$@"
