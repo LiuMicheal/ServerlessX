@@ -1,16 +1,28 @@
 # ServerlessX
 
-ServerlessX is a research codebase for composing three serverless systems:
+ServerlessX is a research umbrella for four complementary systems:
 
-- **SPD**: disaggregated prefill/decode execution and GPU-state transfer.
-- **SRec**: recovery mechanisms for serverless execution.
-- **SLSM**: lifecycle and state management for serverless workloads.
+- **[Wiseswap](systems/wiseswap/README.md)**: a kernel-space programmable RDMA
+  network substrate built around pre-created QP pools, virtual QPs, and
+  NIC-side work-request chains.
+- **[ServerlessPD (SPD)](systems/spd/README.md)**: RDMA Fork-based cross-node
+  GPU-context cloning for disaggregated prefill/decode execution.
+- **[ServerlessRec (SRec)](systems/srec/README.md)**: application-aware,
+  demand-paged RDMA Map for remote embedding memory in serverless recommendation
+  inference.
+- **[ServerlessLSM (SLSM)](systems/slsm/README.md)**: disaggregated LSM-tree
+  storage using RDMA mmap, independently scalable flush/compaction, and
+  lock-free metadata coordination.
 
-This private development snapshot makes the SPD contract inspectable and
-runnable on an ordinary CPU host. It also includes the owned C/C++ native GDR
-and remote-fork userspace boundaries plus hardware-free tests. It does **not**
-yet claim that a fresh machine can run the GPU, RDMA, PhoenixOS, SRec, or SLSM
-paths.
+The executable code in this private development snapshot currently centers on
+ServerlessPD. It makes the SPD contract inspectable and runnable on an ordinary
+CPU host and includes owned C/C++ native GDR and remote-fork userspace
+boundaries plus hardware-free tests. Wiseswap, ServerlessRec, and ServerlessLSM
+are documented research lineage and roadmap boundaries; no runnable
+implementation or profile for them is included in this snapshot.
+
+See [current status](docs/status.md) for the exact release and reproducibility
+boundary.
 
 ## Start here
 
@@ -40,8 +52,9 @@ for the expected flow and troubleshooting steps.
 | Native RDMA DMA-BUF | C++ source and build | Build only | CUDA VMM/DMA-BUF/native RC implementation; no hardware success claim |
 | Remote-fork userspace boundary | C source and tests | Tests only | Role token, ioctl, FD ownership, and fail-closed audit behavior; no kernel module |
 | PhoenixOS lab backend | Reference only | No | Historical experiment context only; no PhoenixOS, Remoting, KRCore, or Mitosis code is bundled |
-| SRec | Documentation placeholder | No | Planned ServerlessX subsystem boundary |
-| SLSM | Documentation placeholder | No | Planned ServerlessX subsystem boundary |
+| Wiseswap | Research status page | No | Published research lineage; no implementation, kernel module, or profile is bundled |
+| ServerlessRec | Research status page | No | RDMA Map recommendation-system roadmap; no implementation or profile is bundled |
+| ServerlessLSM | Research status page | No | RDMA mmap LSM-tree roadmap; no implementation or profile is bundled |
 
 The CPU path is a protocol simulation. It does not transfer a real KV cache,
 load TinyLlama, exercise CUDA, measure network performance, prove GPU Direct
@@ -57,7 +70,9 @@ RDMA, or reproduce a PhoenixOS remote-fork experiment.
 - Research reader: start with [system lineage](docs/research/lineage.md),
   [included-code provenance](provenance/included-code.json), and
   [upstream provenance](provenance/upstreams.json).
-- Contributor or coding agent: follow [AGENTS.md](AGENTS.md).
+- Release-scope reviewer: read [current status](docs/status.md).
+- Contributor: read [CONTRIBUTING.md](CONTRIBUTING.md).
+- Coding agent: follow [AGENTS.md](AGENTS.md).
 - Release reviewer: read [the licensing boundary](provenance/licensing.md).
 
 ## Repository map
@@ -67,7 +82,7 @@ src/serverlessx/       Executable Python package
 native/spd-gdr/        C++ CUDA DMA-BUF/RDMA data plane and probes
 runtime/rfork/         C remote-fork userspace ABI, runtime, and tests
 backends/              External Mitosis and PhOS identity records
-systems/               Human-readable SPD, SRec, and SLSM boundaries
+systems/               Wiseswap, ServerlessPD, ServerlessRec, and ServerlessLSM
 profiles/              Capability and deployment declarations
 deploy/                Deployment entry-point documentation
 tests/                  Standard-library unit and contract tests
@@ -92,7 +107,7 @@ profile, present a plan, and verify the result. Humans remain in control of
 privileged actions: no agent is authorized by this repository to change the
 kernel, drivers, RDMA configuration, networking, VMs, or shared services.
 
-## Private bootstrap and licensing status
+## Current access and licensing status
 
 This repository currently has no project-wide `LICENSE`. Copyright ownership,
 institutional rights, and third-party lineage are being audited before a public

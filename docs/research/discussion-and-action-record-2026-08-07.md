@@ -7,12 +7,16 @@ and host-specific access instructions belong in a separate private note.
 
 ## Project objective
 
-ServerlessX is the umbrella project for three doctoral-research systems:
+ServerlessX is the umbrella project for four complementary doctoral-research
+systems:
 
-- SPD: disaggregated prefill/decode execution, remote fork, and GPU-state
-  movement;
-- SRec: recovery mechanisms for serverless execution;
-- SLSM: lifecycle and state management for serverless workloads.
+- Wiseswap: a kernel-space programmable RDMA network substrate;
+- ServerlessPD: RDMA Fork-based cross-node GPU-context cloning for
+  disaggregated prefill/decode execution;
+- ServerlessRec: application-aware RDMA Map for remote embedding memory in
+  recommendation inference;
+- ServerlessLSM: disaggregated LSM-tree storage using RDMA mmap, independently
+  scalable flush/compaction, and lock-free metadata coordination.
 
 The repository must serve two audiences at once. A person should understand the
 system, maturity, and claim boundaries from the first screen. A coding agent
@@ -154,11 +158,13 @@ not prove that a host supports CUDA DMA-BUF or that an RDMA transfer succeeded.
 
 ## Conference communication
 
-Until all backends are independently deployable, the accurate announcement is:
+After the repository is public and a project-wide license is approved, an
+accurate initial-release announcement would be:
 
-> ServerlessX has opened its control/evidence plane, SPD native GDR data plane,
-> checked remote-fork userspace boundary, and reproducible workload tests.
-> Mitosis and PhOS remain separately attributed research backends.
+> ServerlessX has released its control/evidence plane, SPD native GDR data
+> plane, checked remote-fork userspace boundary, and reproducible workload
+> tests. Wiseswap, ServerlessRec, and ServerlessLSM remain research roadmap
+> boundaries. Mitosis and PhOS remain separately attributed research backends.
 
 It is inaccurate to announce that the complete historical ServerlessX stack is
 portable or independently reproducible. Slides should distinguish code that is
@@ -206,7 +212,8 @@ work rather than organizational hierarchy.
 - Regenerate publishable Mitosis and PhoenixOS patch series with real authors.
 - Replace or remove KRCore and Remoting from any portable release dependency
   graph.
-- Import SRec and SLSM only when their code, tests, ownership, and interfaces
-  are concrete; documentation placeholders must not imply implementation.
+- Import Wiseswap, ServerlessRec, and ServerlessLSM only when their code, tests,
+  ownership, and interfaces are concrete; status pages must not imply
+  implementation.
 - Build contributor, security, conduct, release, and governance policies before
   an ASF proposal.

@@ -38,5 +38,5 @@ execution evidence.
 
 The PhOS path is controlled-lab work. Follow
 `profiles/lab/phos/AGENTS.md`, inventory the exact VMs and daemon start ticks,
-and preserve all pre-run hashes. The public bootstrap has no code or artifact
+and preserve all pre-run hashes. The current bootstrap has no code or artifact
 that can launch this path.

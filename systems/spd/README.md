@@ -1,4 +1,4 @@
-# SPD
+# ServerlessPD (SPD)
 
 SPD is the first implemented ServerlessX subsystem. The repository exposes four
 layers:

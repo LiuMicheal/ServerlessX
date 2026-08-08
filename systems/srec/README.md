@@ -1,10 +1,14 @@
-# SRec
+# ServerlessRec (SRec)
 
-SRec is a reserved ServerlessX subsystem boundary for recovery semantics:
-checkpoint, restart, retry, replay, and recovery evidence. This bootstrap does
-not include an SRec implementation or a runnable profile.
+ServerlessRec is the memory-sensitive recommendation-inference system in the
+ServerlessX research architecture. Its RDMA Map primitive maps remote embedding
+table shards into short-lived instances and fetches data on demand without
+requiring a resource-node CPU on the lookup path.
 
-The directory exists so future recovery code can be added without confusing
-research notes with the portable SPD implementation. Any future SRec feature
-must define its state format, failure model, ownership rules, and verification
-evidence before being advertised as executable.
+This development snapshot contains a research status boundary only. It does not
+include a ServerlessRec implementation, an RDMA Map runtime, a runnable profile,
+or evidence that reproduces the paper's performance claims.
+
+Future source must define the embedding-table mapping contract, demand-paging
+semantics, ownership and reclamation rules, failure behavior, provenance, and
+verification evidence before the subsystem is advertised as executable.

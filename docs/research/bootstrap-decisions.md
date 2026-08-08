@@ -5,7 +5,8 @@ It is not a claim that every historical experiment has been published.
 
 ## Project shape
 
-- Use the umbrella name **ServerlessX** for SPD, SRec, and SLSM.
+- Use the umbrella name **ServerlessX** for Wiseswap, ServerlessPD,
+  ServerlessRec, and ServerlessLSM.
 - Make the repository understandable to a person before optimizing it for an
   automated agent.
 - Also provide machine-readable profiles, JSON command output, `AGENTS.md`, and
@@ -22,8 +23,8 @@ It is not a claim that every historical experiment has been published.
   can inspect substantive implementation code.
 - Describe native RDMA DMA-BUF and PhOS as unavailable profiles until their
   external inputs and deployment gates are independently reviewable.
-- Reserve clear subsystem boundaries for SRec and SLSM without inventing code
-  or readiness claims.
+- Reserve clear research boundaries for Wiseswap, ServerlessRec, and
+  ServerlessLSM without inventing code or readiness claims.
 
 ## IP and dependency boundary
 
@@ -57,4 +58,5 @@ It is not a claim that every historical experiment has been published.
 - A native RDMA DMA-BUF public backend that does not require unlicensed code.
 - Whether the historical PhOS integration can ever become independently
   distributable or should remain an external lab adapter.
-- Versioned public interfaces between SPD, SRec, and SLSM.
+- Versioned public interfaces between Wiseswap, ServerlessPD, ServerlessRec,
+  and ServerlessLSM.

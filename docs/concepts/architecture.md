@@ -3,6 +3,27 @@
 ServerlessX is a multi-language systems project. Languages follow ownership and
 runtime boundaries; they are not selected to influence repository statistics.
 
+## Research system map
+
+The doctoral-research architecture connects one RDMA substrate to three
+application-facing systems through distinct remote-resource primitives:
+
+```text
+Wiseswap: programmable RDMA network substrate
+        |
+        +-- RDMA Fork -----------------> ServerlessPD
+        +-- RDMA Map ------------------> ServerlessRec
+        +-- RDMA mmap + RDMA Fork -----> ServerlessLSM
+```
+
+This map describes the research lineage, not the contents of the current
+development snapshot. Only the ServerlessPD-centered boundaries described below
+have implementation code in this repository. Wiseswap, ServerlessRec, and
+ServerlessLSM currently have status pages but no runnable implementation or
+profile.
+
+## Current repository implementation
+
 ```text
 Human / coding agent
         |
@@ -51,3 +72,6 @@ The CPU contract and rfork unit test run without hardware. Native GDR source can
 be compiled on a prepared CUDA/RDMA host. Actual GPU transfer, remote fork, and
 PhOS reproduction remain separate hardware evidence levels and must not be
 inferred from a successful unit test or build.
+
+See [current status](../status.md) for the exact included, build-only,
+reference-only, and roadmap boundaries.

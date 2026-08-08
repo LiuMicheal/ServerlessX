@@ -1,8 +1,8 @@
 # Open-source roadmap
 
-The repository is intentionally staged so that opening the GitHub URL gives a
-reader something honest to run immediately while preserving a path toward a
-larger public project.
+The repository is intentionally staged so that, after its public-release gates
+are complete, opening the GitHub URL will give a reader something honest to run
+immediately while preserving a path toward a larger public project.
 
 ## Bootstrap (this repository)
 
@@ -13,6 +13,19 @@ larger public project.
 - External backend records for Mitosis and PhOS.
 - Profile declarations for CUDA, RDMA DMA-BUF, and PhOS deployment work.
 - Provenance and licensing records with external source excluded.
+- Research status pages for Wiseswap, ServerlessRec, and ServerlessLSM. These
+  pages do not imply that implementations or runnable profiles are included.
+
+## Research-system roadmap
+
+- Wiseswap: package only independently reviewable programmable-RDMA source,
+  tests, and evidence; do not relabel the included SPD native code as Wiseswap.
+- ServerlessRec: add the RDMA Map and recommendation-inference path only after
+  its ownership, interfaces, dependencies, tests, and evidence are concrete.
+- ServerlessLSM: add the RDMA mmap and LSM-tree path under the same gates.
+
+Until then, ServerlessPD is the only application-facing system with executable
+code in this repository.
 
 ## Public release gate
 
