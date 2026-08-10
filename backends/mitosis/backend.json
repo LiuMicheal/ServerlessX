@@ -24,11 +24,22 @@
     "source_revision": "1732c276a7e7967b7d4e4a76231b366c0be3f7a7",
     "rdma_dependency_revision": "9cd80aef81b75ec81e1bb9a6055355779a80d289",
     "kernel_release": "5.14.0-687.10.1.el9_8.0.1.x86_64",
-    "artifact_sha256": "b3ed2adac39583197c1fba52c44917f2bf6530e5f6a86f1ec7e9232b6dccc8ab",
+    "artifact_sha256": "ffb7ab427db28c3b6001eb48b9137484647314b21a719edc9f0e0c2bb80ef83a",
+    "compile_gate_artifact_sha256": "b3ed2adac39583197c1fba52c44917f2bf6530e5f6a86f1ec7e9232b6dccc8ab",
     "vermagic": "5.14.0-687.10.1.el9_8.0.1.x86_64 SMP preempt mod_unload modversions",
-    "compile_only": true,
+    "compile_only": false,
     "bundled": false,
     "runtime_loaded": false,
+    "runtime_load_tested": true,
+    "runtime_cleanup_verified": true,
+    "runtime_scope": [
+      "module_init",
+      "device_open_nil_ioctl",
+      "fork_prepare_unregister",
+      "module_exit"
+    ],
+    "full_cpu_fork": false,
+    "runtime_warning": "Unpatched return thunk in use",
     "modpost_unresolved": false
   }
 }

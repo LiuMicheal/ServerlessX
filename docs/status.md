@@ -27,7 +27,7 @@ visible source preview and retain the licensing warning.
 | TinyLlama CUDA/TCP workload | Yes | Hardware-free tests | Inspectable source; not declared hardware-ready |
 | SPD native GDR | C++ source and build rules | Build and probes compile on a prepared host | Buildable boundary; no repository-packaged transfer result |
 | rfork userspace runtime | C source and tests | Injected-I/O unit tests | Checked userspace ABI; no bundled kernel module |
-| Mitosis backend | No; identity record only | Private exact-Guest 5.14 compile gate; module not bundled or loaded | External, compile-only research backend |
+| Mitosis backend | No; identity record only | Private exact-Guest 5.14 compile gate plus limited single-Guest runtime smoke gate; module not bundled | External runtime-smoke research backend; complete CPU fork unproven |
 | PhOS backend | No; identity record only | Historical controlled-lab context | External, separately supplied research backend |
 | Wiseswap | Status page only | No implementation or profile | Research lineage and roadmap only |
 | ServerlessRec | Status page only | No implementation or profile | RDMA Map research lineage and roadmap only |

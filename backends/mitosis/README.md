@@ -15,8 +15,10 @@ the Mitosis MIT notice and authors, and exclude KRCore source and binaries.
 
 ## Private 5.14 build status
 
-The SPD lab has a compile-only `fork.ko` build for the exact Guest kernel
-`5.14.0-687.10.1.el9_8.0.1.x86_64`. The artifact is not bundled here, has not
-been loaded, and does not establish runtime fork support. The clean source
-provenance and artifact hash are recorded in the private lab evidence; P2
-runtime validation remains pending.
+The SPD lab has a private runtime-smoke result for the exact Guest kernel
+`5.14.0-687.10.1.el9_8.0.1.x86_64`. In one test Guest, the external module
+loaded, initialized its RDMA/RPC services, passed device-open/Nil and
+`fork_prepare`/unregister checks, and unloaded cleanly. The runtime candidate
+SHA-256 is recorded in the private lab evidence; the module is not bundled
+here. A kernel return-thunk warning was emitted, `ResumeLocal` remains
+unimplemented, and no complete CPU fork is claimed.

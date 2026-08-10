@@ -11,7 +11,8 @@ The immediate work is deliberately limited to:
 
 1. freezing the existing GPU/RDMA/PhOS baseline;
 2. compiling the external Mitosis backend for the exact SPD guest kernel;
-3. running a single-guest CPU fork gate after the module build is accepted.
+3. running a single-Guest Mitosis runtime gate after the module build is
+   accepted.
 
 Cross-guest remote fork, TinyLlama, scheduler work, DCT, and a KRCore rewrite
 remain outside this phase.
@@ -65,13 +66,35 @@ The binary, raw logs, VM details, and manifests remain private; only this
 sanitized provenance is recorded here. BTF generation was skipped because the
 Guest did not expose `vmlinux`.
 
-## P2 safety gate
+## P2a runtime gate
 
-No kernel module has been loaded. P1 is compile-only and is not evidence that
-CPU fork works at runtime. Before the first single-guest test, review the
-VMA-tree/page-walk locking path and prepare explicit load, test, unload, and
-failure-recovery commands for one named test guest. Keep the current GDR and
-PhOS baselines untouched while doing so.
+The first runtime gate was executed inside one existing SPD test Guest using
+the exact kernel `5.14.0-687.10.1.el9_8.0.1.x86_64`. The Guest-built module had
+the exact target vermagic and SHA-256
+`ffb7ab427db28c3b6001eb48b9137484647314b21a719edc9f0e0c2bb80ef83a`.
+
+The following Guest-side checks passed: `insmod`; RDMA context and RPC thread
+initialization (`module_init status=ok`); opening `/dev/mitosis-syscalls`; Nil
+ioctl; `fork_prepare` for handler 73 (`descriptor_bytes=25760`) followed by
+`fork_unregister`; and `rmmod` (`module_exit status=ok`). The final Guest state
+had no loaded module and no Mitosis device node. Host/VM/GPU/RNIC/VF/ACS/IOMMU
+configuration and the existing GDR/PhOS baseline were left unchanged, with no
+reboot.
+
+This gate emitted one non-fatal kernel warning, `Unpatched return thunk in use.
+This should not happen!`; it had no Oops, BUG, panic, or failed unload. A
+pre-existing `xpu-server`/`libpos.so` segmentation fault in the Guest dmesg is
+retained but is unrelated to this run. The warning means this is not a
+warning-free production-ready result.
+
+The result is limited to module/runtime initialization, device ABI access,
+prepare/registration, and cleanup. `ResumeLocal` remains unimplemented and no
+dual-Guest `ResumeRemote` test was attempted, so this is not evidence of a
+complete CPU fork. The next research gate is to resolve or characterize the
+return-thunk warning, then run the smallest appropriate remote-fork test.
+
+Private raw logs, the module, VM details, and build patches remain outside this
+repository under the lab evidence directory.
 
 Host GPU, VF, ACS, IOMMU, storage, and network configuration are not part of
-the single-guest CPU fork gate.
+this single-Guest runtime gate.
