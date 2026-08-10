@@ -98,3 +98,21 @@ repository under the lab evidence directory.
 
 Host GPU, VF, ACS, IOMMU, storage, and network configuration are not part of
 this single-Guest runtime gate.
+
+## P2b dual-Guest checkpoint
+
+The dual-Guest `ResumeRemote` gate is now scoped to a minimal RoCEv2
+compatibility fix in the external KRCore dependency. Ordinary userspace RC
+traffic between the two SPD Guests succeeds with the IPv4-mapped RoCEv2 GID,
+but inherited kernel control-path code assumed GID index 0, rejected a legal
+`ffff` GID hextet, and converted that parse error into a kernel panic. The
+work-in-progress patch makes the GID index configurable and turns malformed
+GIDs into normal connection failures.
+
+Comparison against an independently exercised 112/113 KRCore/KRSN setup also
+confirmed the remaining narrow porting requirement: exact GID-attribute
+lifetime management, RoCE CM attributes, a fallback path when subnet-admin
+lookup is unavailable, and RoCE-aware RC/UD address-vector construction. No
+complete dual-Guest CPU fork or GPU remote fork is claimed yet. No module from
+the current work-in-progress source has been built or loaded, and Host/VM
+device configuration remains unchanged.
