@@ -2,8 +2,9 @@
 macro_rules! gen_add_dev_func {
     ($fn_name:ident, $new_fn_name:ident) => {
         #[allow(non_snake_case)]
-        unsafe extern "C" fn $new_fn_name(dev: *mut ib_device) {
+        unsafe extern "C" fn $new_fn_name(dev: *mut ib_device) -> i32 {
             $fn_name(dev);
+            0
         }
     };
 }
@@ -12,10 +13,21 @@ macro_rules! gen_add_dev_func {
 use crate::bindings::*;
 use crate::linux_kernel_module::c_types;
 
+#[cfg(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)]
 pub use crate::bindings::ib_create_srq;
+
+#[cfg(BASE_INBOX_RDMA_5_14)]
+#[inline]
+pub unsafe fn ib_create_srq(pd: *mut ib_pd, attr: *mut ib_srq_init_attr) -> *mut ib_srq {
+    ib_create_srq_user(pd, attr, core::ptr::null_mut(), core::ptr::null_mut())
+}
 
 #[inline]
 pub unsafe fn ib_create_qp(pd : *mut ib_pd, qp_init_attr : *mut ib_qp_init_attr) -> *mut ib_qp {
+    #[cfg(BASE_INBOX_RDMA_5_14)]
+    return ib_create_qp_kernel(pd, qp_init_attr, crate::kModelName.as_ptr() as *const i8);
+
+    #[cfg(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)]
     ib_create_qp_user(pd, qp_init_attr, core::ptr::null_mut())
 }
 
@@ -36,6 +48,10 @@ pub unsafe fn ib_destroy_qp(qp: *mut ib_qp) -> c_types::c_int {
 
 #[inline]
 pub unsafe fn ib_free_cq(cq: *mut ib_cq) {
+    #[cfg(BASE_INBOX_RDMA_5_14)]
+    return crate::bindings::ib_free_cq(cq);
+
+    #[cfg(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)]
     ib_free_cq_user(cq, core::ptr::null_mut());
 }
 
@@ -69,6 +85,10 @@ pub unsafe fn ib_destroy_srq(srq: *mut ib_srq) -> c_types::c_int {
 
 #[inline]
 pub unsafe fn ib_alloc_mr(pd: *mut ib_pd, mr_type: ib_mr_type::Type, max_num_sg: u32) -> *mut ib_mr { 
+    #[cfg(BASE_INBOX_RDMA_5_14)]
+    return crate::bindings::ib_alloc_mr(pd, mr_type, max_num_sg);
+
+    #[cfg(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)]
     ib_alloc_mr_user(pd, mr_type, max_num_sg, core::ptr::null_mut())
 }
 
@@ -140,6 +160,10 @@ impl ib_device {
             index: c_types::c_int,
             gid: *mut ib_gid,
         ) -> c_types::c_int { 
+        #[cfg(BASE_INBOX_RDMA_5_14)]
+        return crate::bindings::rdma_query_gid(device, port_num as u32, index, gid);
+
+        #[cfg(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)]
         self.ops.query_gid.unwrap()(device, port_num, index, gid)
     }
 }

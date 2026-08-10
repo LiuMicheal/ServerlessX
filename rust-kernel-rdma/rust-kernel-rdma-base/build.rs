@@ -75,7 +75,7 @@ const INCLUDED_KERNEL_FUNCS: &[&str] = &[
     "vmalloc_to_page",
     "sg_.*", 
     "*.alloc_pd", 
-    "page_size",
+    "bd_page_size",
     "ptr_is_err",
     "gfp_highuser",
     "dma_from_device",
@@ -89,6 +89,12 @@ const INCLUDED_VARS: &[&str] = &[
 fn handle_ofed_version() -> String {
     use std::process::Command;
     use std::str;
+
+    if env::var("MITOSIS_RDMA_ABI").as_deref() == Ok("inbox") {
+        let result = "BASE_INBOX_RDMA_5_14".to_string();
+        println!("cargo:rustc-cfg={}", result);
+        return result;
+    }
 
     let output = Command::new("ofed_info")
         .arg("-n")
@@ -140,6 +146,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=KDIR");
     println!("cargo:rerun-if-env-changed=c_flags");
     println!("cargo:rerun-if-env-changed=ofa_flags");
+    println!("cargo:rerun-if-env-changed=MITOSIS_RDMA_ABI");
 
     let ofed_ver = handle_ofed_version();
 
@@ -163,8 +170,23 @@ fn main() {
         .rustfmt_bindings(true);
 
     builder = builder.clang_arg(format!("--target={}", target));
+    if env::var("MITOSIS_RDMA_ABI").as_deref() == Ok("inbox") {
+        builder = builder.clang_arg("-DCC_USING_FENTRY");
+    }
     for arg in kernel_args.iter() {
-        builder = builder.clang_arg(arg.clone());
+        if ![
+            "-mno-fp-ret-in-387",
+            "-mpreferred-stack-boundary=3",
+            "-mskip-rax-setup",
+            "-mfunction-return=thunk-extern",
+            "-fconserve-stack",
+            "-mrecord-mcount",
+        ]
+        .iter()
+        .any(|flag| arg.contains(flag))
+        {
+            builder = builder.clang_arg(arg.clone());
+        }
     }
 
     println!("cargo:rerun-if-changed=src/native/kernel_helper.h");
@@ -207,13 +229,25 @@ fn main() {
     builder.compiler(env::var("CC").unwrap_or_else(|_| "clang".to_string()));
     builder.target(&target);
     builder.warnings(false);
+    builder.define("CC_USING_FENTRY", None);
     builder.define(&ofed_ver, None);
     println!("cargo:rerun-if-changed=src/native/kernel_helper.c");
 
     builder.file("src/native/kernel_helper.c");
 
     for arg in kernel_args.iter() {
-        builder.flag(&arg);
+        if ![
+            "-Qunused-arguments",
+            "-mretpoline-external-thunk",
+            "-mharden-sls=all",
+            "-mno-global-merge",
+            "-Wformat-invalid-specifier",
+        ]
+        .iter()
+        .any(|flag| arg.contains(flag))
+        {
+            builder.flag(&arg);
+        }
     }
     builder.compile("helpers");
 }

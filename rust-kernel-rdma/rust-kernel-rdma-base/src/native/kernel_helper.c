@@ -27,7 +27,7 @@ path_rec_numb_path(void)
 }
 
 #if defined(BASE_MLNX_OFED_LINUX_5_4_1_0_3_0) ||                               \
-  defined(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)
+  defined(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0) || defined(BASE_INBOX_RDMA_5_14)
 int
 bd_ib_post_send(struct ib_qp* qp,
                 struct ib_send_wr* send_wr,
@@ -47,7 +47,7 @@ bd_ib_post_send(struct ib_qp* qp,
 #endif
 
 #if defined(BASE_MLNX_OFED_LINUX_5_4_1_0_3_0) ||                              \
-  defined(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)
+  defined(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0) || defined(BASE_INBOX_RDMA_5_14)
 int
 bd_ib_post_recv(struct ib_qp* qp,
                 struct ib_recv_wr* wr,
@@ -119,7 +119,7 @@ gfp_highuser(void)
 }
 
 unsigned int
-page_size(void)
+bd_page_size(void)
 {
   return PAGE_SIZE;
 }
@@ -184,7 +184,7 @@ ptr_is_err(const void* ptr)
 }
 
 #if defined(BASE_MLNX_OFED_LINUX_5_4_1_0_3_0) ||                               \
-  defined(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)
+  defined(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0) || defined(BASE_INBOX_RDMA_5_14)
 struct ib_cq*
 bd_ib_create_cq(struct ib_device* device,
                 ib_comp_handler comp_handler,

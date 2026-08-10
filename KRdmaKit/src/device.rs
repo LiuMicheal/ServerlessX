@@ -87,7 +87,7 @@ impl Device {
         let err = unsafe {
             ib_query_port(
                 self.raw_ptr().as_ptr(),
-                port_id as u8,
+                port_id as _,
                 &mut port_attr as *mut _,
             )
         };

@@ -4,6 +4,9 @@ use crate::linux_kernel_module::c_types;
 
 #[inline]
 pub unsafe fn ib_alloc_pd(dev: *mut ib_device, flags: c_types::c_uint) -> *mut ib_pd {
+    #[cfg(BASE_INBOX_RDMA_5_14)]
+    return __ib_alloc_pd(dev, flags, crate::kModelName.as_ptr() as *const i8);
+
     #[cfg(BASE_MLNX_OFED_LINUX_4_4_2_0_7_0)]
     return __ib_alloc_pd(dev, flags, crate::kModelName.as_ptr() as *const i8, false);
 
@@ -66,9 +69,10 @@ pub use crate::bindings::dma_from_device;
 pub use crate::bindings::gfp_highuser;
 
 /// MR related functions;
+#[cfg(not(BASE_INBOX_RDMA_5_14))]
 pub use crate::bindings::ib_get_dma_mr;
 pub use crate::bindings::ib_map_mr_sg;
-pub use crate::bindings::page_size;
+pub use crate::bindings::bd_page_size;
 pub use crate::bindings::sg_init_table;
 pub use crate::bindings::vmalloc_to_page;
 

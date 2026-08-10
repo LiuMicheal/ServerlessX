@@ -3,6 +3,7 @@
 #endif
 
 #include <rdma/ib_cm.h>
+#include <rdma/ib_cache.h>
 #include <rdma/ib_sa.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
@@ -67,7 +68,7 @@ void *bd_page_address(const struct page *page);
 
 int gfp_highuser(void);
 
-unsigned int page_size(void);
+unsigned int bd_page_size(void);
 
 unsigned int dma_from_device(void);
 

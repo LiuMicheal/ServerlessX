@@ -62,10 +62,10 @@ mod ofed_5_4_1_0_3_0;
 #[cfg(BASE_MLNX_OFED_LINUX_5_4_1_0_3_0)]
 pub use ofed_5_4_1_0_3_0::*;
 
-#[cfg(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)]
+#[cfg(any(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0, BASE_INBOX_RDMA_5_14))]
 mod ofed_4_9_3_1_5_0;
 
-#[cfg(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0)]
+#[cfg(any(BASE_MLNX_OFED_LINUX_4_9_3_1_5_0, BASE_INBOX_RDMA_5_14))]
 pub use ofed_4_9_3_1_5_0::*;
 
 impl rdma_ah_attr { 

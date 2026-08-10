@@ -65,9 +65,13 @@ impl Builder {
         // so that data should never be moved.
 
         // create the dev
+        #[cfg(not(kernel_5_14_0_or_greater))]
         let mut _key = bindings::lock_class_key {};
 
         unsafe {
+            #[cfg(kernel_5_14_0_or_greater)]
+            let cl = bindings::class_create(b"char\0".as_ptr() as *const i8);
+            #[cfg(not(kernel_5_14_0_or_greater))]
             let cl = bindings::__class_create(
                 &mut bindings::__this_module,
                 b"char\0".as_ptr() as *const i8,
@@ -152,9 +156,19 @@ impl Drop for Registration {
 
 use crate::bindings::*;
 #[allow(unused_variables)]
+#[cfg(kernel_5_14_0_or_greater)]
+unsafe extern "C" fn dev_set_user(dev: *const device, mode: *mut umode_t) -> *mut c_types::c_char {
+    if !mode.is_null() {
+        // allow user-mode access
+        mode.write(S_IALLUGO as u16);
+    }
+    core::ptr::null_mut()
+}
+
+#[allow(unused_variables)]
+#[cfg(not(kernel_5_14_0_or_greater))]
 unsafe extern "C" fn dev_set_user(dev: *mut device, mode: *mut umode_t) -> *mut c_types::c_char {
     if !mode.is_null() {
-        //        crate::println!("write user mode success");
         // allow user-mode access
         mode.write(S_IALLUGO as u16);
     }

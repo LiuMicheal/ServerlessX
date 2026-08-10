@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/syscalls.h>
+#include <linux/timekeeping.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
@@ -55,6 +56,9 @@ bd_schedule(void);
 
 u64
 get_hz(void);
+
+u64
+bd_ktime_get_ns(void);
 
 void
 bd_init_completion(struct completion *x);

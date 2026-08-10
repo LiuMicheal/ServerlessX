@@ -66,6 +66,12 @@ get_hz(void)
     return HZ;
 }
 
+u64
+bd_ktime_get_ns(void)
+{
+    return ktime_get_ns();
+}
+
 void
 bd_init_completion(struct completion* x)
 {

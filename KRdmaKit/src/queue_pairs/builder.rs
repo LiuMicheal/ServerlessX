@@ -479,7 +479,7 @@ impl PreparedQueuePair {
             let mut attr = ib_qp_attr {
                 qp_state: ib_qp_state::IB_QPS_INIT,
                 pkey_index: self.pkey_index,
-                port_num: self.port_num,
+                port_num: self.port_num as _,
                 qkey: self.qkey,
                 ..Default::default()
             };

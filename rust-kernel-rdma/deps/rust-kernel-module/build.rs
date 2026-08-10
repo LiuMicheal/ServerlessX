@@ -31,6 +31,7 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
     "get_random_bytes",
     "rng_is_initialized",
     "printk",
+    "_printk",
     "add_device_randomness",
 
     // concurrency control
@@ -41,6 +42,7 @@ const INCLUDED_FUNCTIONS: &[&str] = &[
 
     // device related
     "__class_create",
+    "class_create",
     "class_destroy",
     "device_create",
     "device_destroy",
@@ -174,8 +176,23 @@ fn main() {
         .rustfmt_bindings(true);
 
     builder = builder.clang_arg(format!("--target={}", target));
+    if env::var("MITOSIS_RDMA_ABI").as_deref() == Ok("inbox") {
+        builder = builder.clang_arg("-DCC_USING_FENTRY");
+    }
     for arg in kernel_args.iter() {
-        builder = builder.clang_arg(arg.clone());
+        if ![
+            "-mno-fp-ret-in-387",
+            "-mpreferred-stack-boundary=3",
+            "-mskip-rax-setup",
+            "-mfunction-return=thunk-extern",
+            "-fconserve-stack",
+            "-mrecord-mcount",
+        ]
+        .iter()
+        .any(|flag| arg.contains(flag))
+        {
+            builder = builder.clang_arg(arg.clone());
+        }
     }
 
     println!("cargo:rerun-if-changed=src/bindings_helper.h");
@@ -210,10 +227,24 @@ fn main() {
     builder.compiler(env::var("CC").unwrap_or_else(|_| "clang".to_string()));
     builder.target(&target);
     builder.warnings(false);
+    if env::var("MITOSIS_RDMA_ABI").as_deref() == Ok("inbox") {
+        builder.define("CC_USING_FENTRY", None);
+    }
     println!("cargo:rerun-if-changed=src/helpers.c");
     builder.file("src/helpers.c");
     for arg in kernel_args.iter() {
-        builder.flag(&arg);
+        if ![
+            "-Qunused-arguments",
+            "-mretpoline-external-thunk",
+            "-mharden-sls=all",
+            "-mno-global-merge",
+            "-Wformat-invalid-specifier",
+        ]
+        .iter()
+        .any(|flag| arg.contains(flag))
+        {
+            builder.flag(&arg);
+        }
     }
     builder.compile("helpers");
 }

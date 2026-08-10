@@ -27,7 +27,7 @@ where
         };
 
         // step #2.
-        let err = unsafe { ib_cm_listen(raw_cm, listen_id, 0) };
+        let err = unsafe { ib_cm_listen(raw_cm, listen_id) };
         if err != 0 {
             return Err(CMError::Creation(err));
         }

@@ -11,10 +11,10 @@ use crate::{device::DeviceRef, ControlpathError};
 #[derive(Debug)]
 pub struct Context {
     inner_device: DeviceRef,
-    // kernel has little support for MR
-    // so a global KMR is sufficient
     #[cfg(feature = "kernel")]
-    kmr: NonNull<ib_mr>,
+    lkey: u32,
+    #[cfg(feature = "kernel")]
+    rkey: u32,
 
     #[cfg(feature = "user")]
     ctx: NonNull<ibv_context>,
@@ -73,13 +73,15 @@ impl Context {
             })
             .ok_or(ControlpathError::ContextError("pd", Error::EAGAIN))?;
 
-            // then MR
-            let kmr = NonNull::new(unsafe { ib_get_dma_mr(pd.as_ptr(), mr_flags) })
-                .ok_or(ControlpathError::ContextError("mr", Error::EAGAIN))?;
+            let (lkey, rkey) = unsafe {
+                let pd = pd.as_ref();
+                (pd.local_dma_lkey, pd.unsafe_global_rkey)
+            };
 
             Ok(Arc::new(Self {
                 inner_device: dev.clone(),
-                kmr,
+                lkey,
+                rkey,
                 pd,
             }))
         }
@@ -102,13 +104,13 @@ impl Context {
     #[cfg(feature = "kernel")]
     /// Get the lkey of this context
     pub fn lkey(&self) -> u32 {
-        unsafe { self.kmr.as_ref().lkey }
+        self.lkey
     }
 
     #[cfg(feature = "kernel")]
     /// Get the rkey of this context
     pub fn rkey(&self) -> u32 {
-        unsafe { self.kmr.as_ref().rkey }
+        self.rkey
     }
 
     pub fn get_dev_ref(&self) -> &DeviceRef {
@@ -146,7 +148,7 @@ impl Context {
             }
 
             ah_attr.sl = 0;
-            ah_attr.port_num = port_num;
+            ah_attr.port_num = port_num as _;
 
             unsafe {
                 ah_attr.grh.dgid.global.subnet_prefix = gid.global.subnet_prefix;
@@ -261,9 +263,6 @@ impl Drop for AddressHandler {
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
-            #[cfg(feature = "kernel")]
-            ib_dereg_mr(self.kmr.as_ptr());
-
             ib_dealloc_pd(self.pd.as_ptr());
         }
     }

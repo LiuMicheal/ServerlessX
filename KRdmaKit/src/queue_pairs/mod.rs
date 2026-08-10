@@ -134,7 +134,7 @@ impl QueuePair {
             ib_query_qp(
                 self.inner_qp.as_ptr(),
                 &mut attr as *mut ib_qp_attr,
-                ib_qp_attr_mask::IB_QP_STATE,
+                ib_qp_attr_mask::IB_QP_STATE as _,
                 &mut init_attr as *mut ib_qp_init_attr,
             )
         };

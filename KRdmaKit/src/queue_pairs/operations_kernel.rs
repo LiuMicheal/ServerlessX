@@ -371,12 +371,12 @@ impl QueuePair {
             let mut init_attr = ib_qp_attr {
                 qp_state: ib_qp_state::IB_QPS_INIT,
                 pkey_index: self.pkey_index,
-                port_num: self.port_num,
+                port_num: self.port_num as _,
                 qp_access_flags: self.access as i32,
                 ..Default::default()
             };
             let ret =
-                unsafe { ib_modify_qp(self.inner_qp.as_ptr(), &mut init_attr as *mut _, mask) };
+                unsafe { ib_modify_qp(self.inner_qp.as_ptr(), &mut init_attr as *mut _, mask as _) };
             if ret != 0 {
                 log::error!("Bring up rc inner, reset=>init error");
                 return Err(ControlpathError::CreationError(
@@ -396,7 +396,7 @@ impl QueuePair {
             let mut ah_attr = rdma_ah_attr {
                 type_: rdma_ah_attr_type::RDMA_AH_ATTR_TYPE_IB,
                 sl: 0,
-                port_num: self.port_num,
+                port_num: self.port_num as _,
                 ..Default::default()
             };
             unsafe { bd_rdma_ah_set_dlid(&mut ah_attr, lid) };
@@ -418,7 +418,7 @@ impl QueuePair {
                 ..Default::default()
             };
             let ret =
-                unsafe { ib_modify_qp(self.inner_qp.as_ptr(), &mut rtr_attr as *mut _, mask) };
+                unsafe { ib_modify_qp(self.inner_qp.as_ptr(), &mut rtr_attr as *mut _, mask as _) };
             if ret != 0 {
                 log::error!("Bring up rc inner, init=>rtr error");
                 return Err(ControlpathError::CreationError(
@@ -444,7 +444,7 @@ impl QueuePair {
                 ..Default::default()
             };
             let ret =
-                unsafe { ib_modify_qp(self.inner_qp.as_ptr(), &mut rts_attr as *mut _, mask) };
+                unsafe { ib_modify_qp(self.inner_qp.as_ptr(), &mut rts_attr as *mut _, mask as _) };
             if ret != 0 {
                 log::error!("Bring up rc inner, rtr=>rts error");
                 return Err(ControlpathError::CreationError(

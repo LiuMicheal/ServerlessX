@@ -1,6 +1,9 @@
 /// A kernel timer based on RDTSC
 /// may need to further check the conversion from
 
+#[cfg(BASE_INBOX_RDMA_5_14)]
+use crate::bindings::bd_ktime_get_ns;
+#[cfg(not(BASE_INBOX_RDMA_5_14))]
 use crate::bindings::{do_gettimeofday, timeval};
 
 #[allow(dead_code)]
@@ -57,6 +60,9 @@ impl RTimer {
 ///
 #[repr(C,align(64))]
 pub struct KTimer {
+    #[cfg(BASE_INBOX_RDMA_5_14)]
+    cur: u64,
+    #[cfg(not(BASE_INBOX_RDMA_5_14))]
     cur: timeval,
 }
 
@@ -67,22 +73,42 @@ impl KTimer {
         res
     }
 
+    #[cfg(BASE_INBOX_RDMA_5_14)]
+    fn get_cur_ns() -> u64 {
+        unsafe { bd_ktime_get_ns() }
+    }
+
+    #[cfg(not(BASE_INBOX_RDMA_5_14))]
     pub fn get_cur_timeval() -> timeval {
         Self::new().cur
     }
 
+    #[cfg(BASE_INBOX_RDMA_5_14)]
+    pub fn get_passed_usec(&self) -> i64 {
+        (Self::get_cur_ns().saturating_sub(self.cur) / 1000) as i64
+    }
+
+    #[cfg(not(BASE_INBOX_RDMA_5_14))]
     pub fn get_passed_usec(&self) -> i64 {
         let passed = Self::get_cur_timeval() - self.cur;
         passed.tv_sec * 1000000 + passed.tv_usec
     }
 
+    #[cfg(BASE_INBOX_RDMA_5_14)]
+    pub fn reset(&mut self) {
+        self.cur = Self::get_cur_ns();
+    }
+
+    #[cfg(not(BASE_INBOX_RDMA_5_14))]
     pub fn reset(&mut self) {
         unsafe { do_gettimeofday(&mut self.cur as *mut _) };
     }
 }
 
+#[cfg(not(BASE_INBOX_RDMA_5_14))]
 use core::ops::Sub;
 
+#[cfg(not(BASE_INBOX_RDMA_5_14))]
 impl Sub for timeval {
     type Output = Self;
 

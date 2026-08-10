@@ -207,13 +207,19 @@ impl<T: FileOperations> FileOperationsVtable<T> {
         #[cfg(kernel_5_1_0_or_greater)]
         iopoll: None,
         lock: None,
-        #[cfg(kernel_4_15_0_or_greater)]
+        #[cfg(all(kernel_4_15_0_or_greater, not(kernel_5_14_0_or_greater)))]
         mmap_supported_flags: 0,
+        #[cfg(kernel_5_14_0_or_greater)]
+        fop_flags: 0,
         owner: ptr::null_mut(),
         poll: None,
         read_iter: None,
         #[cfg(kernel_4_20_0_or_greater)]
         remap_file_range: None,
+        #[cfg(kernel_5_14_0_or_greater)]
+        uring_cmd: None,
+        #[cfg(kernel_5_14_0_or_greater)]
+        uring_cmd_iopoll: None,
         sendpage: None,
         #[cfg(kernel_aufs_setfl)]
         setfl: None,

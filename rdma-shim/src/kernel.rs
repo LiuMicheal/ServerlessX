@@ -9,7 +9,7 @@ pub mod bindings {
     pub use rust_kernel_rdma_base::{
         ib_alloc_pd, ib_dealloc_pd, ib_dereg_mr, rdma_create_ah_wrapper, rdma_destroy_ah,
     };
-    pub use rust_kernel_rdma_base::{ib_create_cq, ib_destroy_srq, ib_free_cq};
+    pub use rust_kernel_rdma_base::{ib_create_cq, ib_create_srq, ib_destroy_srq, ib_free_cq};
 
     /// DCT-related bindings
     #[cfg(feature = "dct")]

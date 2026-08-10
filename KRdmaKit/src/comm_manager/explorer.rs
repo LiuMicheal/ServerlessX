@@ -99,7 +99,6 @@ impl Explorer {
             &mut path_request as *mut _,
             path_rec_service_id() | path_rec_dgid() | path_rec_sgid() | path_rec_numb_path(),
             EXPLORE_TIMEOUT_MS as _,
-            0,
             rdma_shim::kernel::linux_kernel_module::bindings::GFP_KERNEL,
             Some(explore_complete_handler),
             (&mut self as *mut Self).cast::<c_types::c_void>(),
@@ -145,6 +144,7 @@ impl Drop for SAClient {
 pub unsafe extern "C" fn explore_complete_handler(
     status: rdma_shim::ffi::c_types::c_int,
     resp: *mut sa_path_rec,
+    _num_prs: rdma_shim::ffi::c_types::c_uint,
     context: *mut rdma_shim::ffi::c_types::c_void,
 ) {
     let e = &mut *(context as *mut Explorer);

@@ -14,7 +14,7 @@ pub fn getrandom(dest: &mut [u8]) -> error::KernelResult<()> {
     unsafe {
         bindings::get_random_bytes(
             dest.as_mut_ptr() as *mut c_types::c_void,
-            dest.len().try_into()?,
+            dest.len() as _,
         );
     }
     Ok(())
