@@ -11,6 +11,7 @@ use crate::{device::DeviceRef, ControlpathError};
 #[derive(Debug)]
 pub struct Context {
     inner_device: DeviceRef,
+    gid_index: usize,
     #[cfg(feature = "kernel")]
     lkey: u32,
     #[cfg(feature = "kernel")]
@@ -38,18 +39,25 @@ const IB_PD_UNSAFE_GLOBAL_RKEY: u32 = 0x01;
 
 impl Context {
     pub fn new(dev: &DeviceRef) -> Result<ContextRef, ControlpathError> {
+        Self::new_with_gid_index(dev, 0)
+    }
+
+    pub fn new_with_gid_index(
+        dev: &DeviceRef,
+        gid_index: usize,
+    ) -> Result<ContextRef, ControlpathError> {
         #[cfg(feature = "kernel")]
         {
             let mr_flags = ib_access_flags::IB_ACCESS_LOCAL_WRITE
                 | ib_access_flags::IB_ACCESS_REMOTE_READ
                 | ib_access_flags::IB_ACCESS_REMOTE_WRITE
                 | ib_access_flags::IB_ACCESS_REMOTE_ATOMIC;
-            Self::new_from_flags(dev, mr_flags as i32)
+            Self::new_from_flags_with_gid_index(dev, mr_flags as i32, gid_index)
         }
 
         #[cfg(feature = "user")]
         {
-            Self::new_from_flags(dev, 0)
+            Self::new_from_flags_with_gid_index(dev, 0, gid_index)
         }
     }
 
@@ -65,6 +73,15 @@ impl Context {
 
     #[allow(unused_variables)]
     pub fn new_from_flags(dev: &DeviceRef, mr_flags: i32) -> Result<ContextRef, ControlpathError> {
+        Self::new_from_flags_with_gid_index(dev, mr_flags, 0)
+    }
+
+    #[allow(unused_variables)]
+    pub fn new_from_flags_with_gid_index(
+        dev: &DeviceRef,
+        mr_flags: i32,
+        gid_index: usize,
+    ) -> Result<ContextRef, ControlpathError> {
         #[cfg(feature = "kernel")]
         {
             // first allocate a PD
@@ -80,6 +97,7 @@ impl Context {
 
             Ok(Arc::new(Self {
                 inner_device: dev.clone(),
+                gid_index,
                 lkey,
                 rkey,
                 pd,
@@ -95,10 +113,16 @@ impl Context {
                 .ok_or(ControlpathError::ContextError("pd", Error::EAGAIN))?;
             Ok(Arc::new(Self {
                 inner_device: dev.clone(),
+                gid_index,
                 ctx,
                 pd,
             }))
         }
+    }
+
+    #[inline]
+    pub fn gid_index(&self) -> usize {
+        self.gid_index
     }
 
     #[cfg(feature = "kernel")]
@@ -149,6 +173,9 @@ impl Context {
 
             ah_attr.sl = 0;
             ah_attr.port_num = port_num as _;
+            ah_attr.grh.sgid_index = gid_idx as _;
+            ah_attr.grh.flow_label = 0;
+            ah_attr.grh.hop_limit = 255;
 
             unsafe {
                 ah_attr.grh.dgid.global.subnet_prefix = gid.global.subnet_prefix;

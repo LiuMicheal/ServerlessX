@@ -86,8 +86,7 @@ impl DatagramEndpoint {
         #[cfg(feature = "dct")] dct_num: u32,
         #[cfg(feature = "dct")] dc_key: u64,
     ) -> Result<Self, ControlpathError> {
-        // FIXME: what if gid_index != 0?
-        let ah = ctx.create_address_handler(local_port_num, 0, lid, gid)?;
+        let ah = ctx.create_address_handler(local_port_num, ctx.gid_index(), lid, gid)?;
 
         #[cfg(not(feature = "dct"))]
         return Ok(Self {

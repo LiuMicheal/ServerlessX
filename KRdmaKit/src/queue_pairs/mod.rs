@@ -206,8 +206,7 @@ impl QueuePair {
 
     #[inline]
     pub fn gid(&self) -> KernelResult<ib_gid> {
-        // FIXME: what if gid index is not 0?
-        Ok(self.ctx().query_gid(self.port_num, 0)?)
+        Ok(self.ctx().query_gid(self.port_num, self.ctx().gid_index())?)
     }
 
     #[cfg(feature = "kernel")]
@@ -226,8 +225,7 @@ impl QueuePair {
         let gid = self
             .ctx()
             .get_dev_ref()
-            // FIXME: what if gid_index != 0?
-            .query_gid(self.port_num, 0)
+            .query_gid(self.port_num, self.ctx().gid_index())
             .map_err(|err| CMError::Creation(err.to_kernel_errno()))?;
 
         let lid = port_attr.lid as u16;

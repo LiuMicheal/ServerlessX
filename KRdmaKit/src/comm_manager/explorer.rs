@@ -22,6 +22,7 @@ pub const EXPLORE_TIMEOUT_MS: rdma_shim::ffi::c_types::c_int = 5000;
 /// new connection (to a new machine).
 pub struct Explorer {
     inner_dev: DeviceRef,
+    gid_index: usize,
 
     // methods for waiting for the completion of the explore process
     done: completion,
@@ -30,8 +31,13 @@ pub struct Explorer {
 
 impl Explorer {
     pub fn new(dev: &DeviceRef) -> Self {
+        Self::new_with_gid_index(dev, 0)
+    }
+
+    pub fn new_with_gid_index(dev: &DeviceRef, gid_index: usize) -> Self {
         Self {
             inner_dev: dev.clone(),
+            gid_index,
             done: Default::default(),
             result: None,
         }
@@ -82,8 +88,7 @@ impl Explorer {
 
         let mut path_request = SubnetAdminPathRecord {
             dgid: dst_gid,
-            // FIXME: what if gid_index != 0?
-            sgid: self.inner_dev.query_gid(source_port_id, 0).map_err(|_| {
+            sgid: self.inner_dev.query_gid(source_port_id, self.gid_index).map_err(|_| {
                 CMError::InvalidArg("Source port number", source_port_id.to_string())
             })?,
             numb_path: 1, // FIXME

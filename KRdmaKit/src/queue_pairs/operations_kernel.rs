@@ -400,7 +400,7 @@ impl QueuePair {
                 ..Default::default()
             };
             unsafe { bd_rdma_ah_set_dlid(&mut ah_attr, lid) };
-            ah_attr.grh.sgid_index = 0;
+            ah_attr.grh.sgid_index = self.ctx().gid_index() as _;
             ah_attr.grh.flow_label = 0;
             ah_attr.grh.hop_limit = 255;
             unsafe {

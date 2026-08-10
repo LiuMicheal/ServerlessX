@@ -29,6 +29,13 @@ impl Device {
         Context::new(self)
     }
 
+    pub fn open_context_with_gid_index(
+        self: &DeviceRef,
+        gid_index: usize,
+    ) -> Result<Arc<Context>, crate::ControlpathError> {
+        Context::new_with_gid_index(self, gid_index)
+    }
+
     pub fn name(&self) -> alloc::string::String {
         crate::utils::convert_c_str_to_string(&unsafe { self.inner.as_ref().name })
     }
