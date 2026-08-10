@@ -82,12 +82,12 @@ use crate::remote_mapping::{PhysAddr, PhysAddrBitFlag};
 
 impl VMACopyPTGenerator<'_, '_> {
     pub fn generate(&self) {
-        let mut walk: mm_walk = Default::default();
-        walk.pte_entry = Some(Self::handle_pte_entry);
-        walk.private = self as *const _ as *mut crate::linux_kernel_module::c_types::c_void;
+        let mut walk_ops: mm_walk_ops = Default::default();
+        walk_ops.pte_entry = Some(Self::handle_pte_entry);
 
-        let mut engine = VMWalkEngine::new(walk);
-        unsafe { engine.walk(self.vma.vma_inner.get_raw_ptr()) };
+        let engine = VMWalkEngine::new(walk_ops);
+        let private = self as *const _ as *mut crate::linux_kernel_module::c_types::c_void;
+        unsafe { engine.walk(self.vma.vma_inner.get_raw_ptr(), private) };
 
         // crate::log::debug!("walk done");
     }
@@ -145,12 +145,12 @@ impl<'a, 'b> VMACOWPTGenerator<'a, 'b> {
 
 impl VMACOWPTGenerator<'_, '_> {
     pub fn generate(&self) {
-        let mut walk: mm_walk = Default::default();
-        walk.pte_entry = Some(Self::handle_pte_entry);
-        walk.private = self as *const _ as *mut crate::linux_kernel_module::c_types::c_void;
+        let mut walk_ops: mm_walk_ops = Default::default();
+        walk_ops.pte_entry = Some(Self::handle_pte_entry);
 
-        let mut engine = VMWalkEngine::new(walk);
-        unsafe { engine.walk(self.vma.vma_inner.get_raw_ptr()) };
+        let engine = VMWalkEngine::new(walk_ops);
+        let private = self as *const _ as *mut crate::linux_kernel_module::c_types::c_void;
+        unsafe { engine.walk(self.vma.vma_inner.get_raw_ptr(), private) };
     }
 
     #[allow(non_upper_case_globals)]

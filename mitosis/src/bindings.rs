@@ -68,8 +68,10 @@ impl core::fmt::Display for StackRegisters {
 impl core::fmt::Debug for mm_struct {
     fn fmt(&self, fmt: &mut ::core::fmt::Formatter) -> core::fmt::Result {
         fmt.debug_struct("mm_struct")
-            .field("mmap", &self.mmap)
-            .field("total_vm", &self.total_vm)
+            .field(
+                "total_vm",
+                &unsafe { pmem_mm_get_total_vm(self as *const mm_struct) },
+            )
             .finish()
     }
 }
@@ -77,9 +79,13 @@ impl core::fmt::Debug for mm_struct {
 impl core::fmt::Display for vm_area_struct {
     fn fmt(&self, fmt: &mut ::core::fmt::Formatter) -> core::fmt::Result {
         // do not use {:?} in order to avoid kernel stack overflow
+        let prot = unsafe { pmem_vma_get_prot(self as *const vm_area_struct) };
         fmt.write_fmt(format_args!(
             "vm_area: 0x{:x} ~ 0x{:x}, flags: 0x{:x}, protecton: 0x{:x}",
-            self.vm_start, self.vm_end, self.vm_flags, self.vm_page_prot.pgprot
+            unsafe { pmem_vma_get_start(self as *const vm_area_struct) },
+            unsafe { pmem_vma_get_end(self as *const vm_area_struct) },
+            unsafe { pmem_vma_get_flags(self as *const vm_area_struct) },
+            prot.pgprot
         ))
     }
 }

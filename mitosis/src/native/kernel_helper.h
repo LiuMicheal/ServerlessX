@@ -40,11 +40,15 @@ pmem_get_current_task(void);
 pte_t *
 pmem_get_pte(struct mm_struct *mm, unsigned long addr);
 
-int pmem_call_walk_range(unsigned long addr,
+int pmem_call_walk_range(struct mm_struct *mm,
+                         unsigned long addr,
                          unsigned long end,
-                         struct mm_walk *walk);
+                         const struct mm_walk_ops *ops,
+                         void *private);
 
-int pmem_call_walk_vma(struct vm_area_struct *vm, struct mm_walk *walk);
+int pmem_call_walk_vma(struct vm_area_struct *vma,
+                       const struct mm_walk_ops *ops,
+                       void *private);
 
 unsigned long
 pmem_get_phy_from_pte(pte_t *pte);
@@ -97,6 +101,35 @@ pmem_phys_to_virt(u64 p);
 
 unsigned int
 pmem_filemap_fault(struct vm_fault *vmf);
+
+struct vm_area_struct *
+pmem_vm_fault_get_vma(struct vm_fault *vmf);
+
+unsigned long
+pmem_vm_fault_get_address(struct vm_fault *vmf);
+
+void
+pmem_vm_fault_set_page(struct vm_fault *vmf, struct page *page);
+
+unsigned long
+pmem_vma_get_start(const struct vm_area_struct *vma);
+
+unsigned long
+pmem_vma_get_end(const struct vm_area_struct *vma);
+
+unsigned long
+pmem_vma_get_flags(const struct vm_area_struct *vma);
+
+pgprot_t
+pmem_vma_get_prot(const struct vm_area_struct *vma);
+
+void
+pmem_vma_mod_flags(struct vm_area_struct *vma,
+                   vm_flags_t set,
+                   vm_flags_t clear);
+
+unsigned long
+pmem_mm_get_total_vm(const struct mm_struct *mm);
 /*
  Page protection flags
  */

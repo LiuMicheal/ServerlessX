@@ -90,20 +90,12 @@ impl MemoryDescriptor {
     /// find a specific virtual memory area (VMA) based on the index
     ///
     /// # Arguments
-    /// * `idx` - index to the `mm_struct`'s mmap list
+    /// * `idx` - index in the `mm_struct`'s ordered VMA set
     #[allow(dead_code)]
     pub fn get_vma_area(&self, idx: usize) -> core::option::Option<*mut vm_area_struct> {
-        let mut start = 0;
-        let mut cur = self.mm_inner.mmap;
-        while start != idx {
-            start += 1;
-            cur = unsafe { (*cur).vm_next };
-        }
-        if cur != core::ptr::null_mut() {
-            Some(cur)
-        } else {
-            None
-        }
+        self.get_vma_iter()
+            .nth(idx)
+            .map(|vma| unsafe { vma.get_raw_ptr() })
     }
 
     #[allow(dead_code)]
@@ -123,7 +115,8 @@ impl MemoryDescriptor {
 /// }
 /// ```
 pub struct VMAIter {
-    cur: *mut vm_area_struct,
+    mm: *mut mm_struct,
+    next_addr: VirtAddrType,
 }
 
 // uses an iterator to simplfiy memory range traversal
@@ -131,20 +124,21 @@ impl Iterator for VMAIter {
     type Item = VMA<'static>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cur == core::ptr::null_mut() {
-            None
-        } else {
-            let res = self.cur;
-            self.cur = unsafe { (*res).vm_next };
-            unsafe { Some(VMA::new(&mut (*res))) }
+        let vma = unsafe { crate::bindings::find_vma(self.mm, self.next_addr) };
+        if vma == core::ptr::null_mut() {
+            return None;
         }
+
+        self.next_addr = unsafe { crate::bindings::pmem_vma_get_end(vma) };
+        unsafe { Some(VMA::new(&mut (*vma))) }
     }
 }
 
 impl VMAIter {
     pub fn new(m: &MemoryDescriptor) -> Self {
         Self {
-            cur: m.mm_inner.mmap,
+            mm: m.mm_inner as *const _ as *mut mm_struct,
+            next_addr: 0,
         }
     }
 }

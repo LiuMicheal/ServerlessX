@@ -686,16 +686,17 @@ static mut MY_VM_OP: crate::bindings::vm_operations_struct = unsafe {
 unsafe extern "C" fn open_handler(_area: *mut crate::bindings::vm_area_struct) {}
 
 #[allow(dead_code)]
-unsafe extern "C" fn page_fault_handler(vmf: *mut crate::bindings::vm_fault) -> c_int {
-    let handler: *mut MitosisSysCallHandler = (*(*vmf).vma).vm_private_data as *mut _;
+unsafe extern "C" fn page_fault_handler(vmf: *mut crate::bindings::vm_fault) -> u32 {
+    let vma = crate::bindings::pmem_vm_fault_get_vma(vmf);
+    let handler: *mut MitosisSysCallHandler = (*vma).vm_private_data as *mut _;
     (*handler).handle_page_fault(vmf)
 }
 
 impl MitosisSysCallHandler {
     /// Core logic of handling the page faults
     #[inline(always)]
-    unsafe fn handle_page_fault(&mut self, vmf: *mut crate::bindings::vm_fault) -> c_int {
-        let fault_addr = (*vmf).address;
+    unsafe fn handle_page_fault(&mut self, vmf: *mut crate::bindings::vm_fault) -> u32 {
+        let fault_addr = crate::bindings::pmem_vm_fault_get_address(vmf);
         #[cfg(feature = "resume-profile")]
         self.incr_fault_page_cnt();
 
@@ -761,7 +762,7 @@ impl MitosisSysCallHandler {
         };
         match new_page {
             Some(new_page_p) => {
-                (*vmf).page = new_page_p as *mut _;
+                crate::bindings::pmem_vm_fault_set_page(vmf, new_page_p as *mut _);
                 // update cache
                 #[cfg(feature = "page-cache")]
                 if miss_page_cache && phy_addr.is_some() {
@@ -785,13 +786,14 @@ impl MitosisSysCallHandler {
             }
             None => {
                 // check whether the page is anonymous
-                let vma = crate::kern_wrappers::vma::VMA::new(&mut *((*vmf).vma));
+                let fault_vma = crate::bindings::pmem_vm_fault_get_vma(vmf);
+                let vma = crate::kern_wrappers::vma::VMA::new(&mut *fault_vma);
                 for &vd in &resume_related.descriptor.vma {
                     if vd.is_anonymous && (vma.get_start() == vd.get_start()) {
                         let new_page_p =
                             crate::bindings::pmem_alloc_page(crate::bindings::PMEM_GFP_HIGHUSER);
 
-                        (*vmf).page = new_page_p as *mut _;
+                        crate::bindings::pmem_vm_fault_set_page(vmf, new_page_p as *mut _);
                         return 0;
                     }
                 }
@@ -800,7 +802,7 @@ impl MitosisSysCallHandler {
                     "[handle_page_fault] Failed to read the remote page, fault addr: 0x{:x}",
                     fault_addr
                 );
-                crate::bindings::FaultFlags::SIGSEGV.bits() as linux_kernel_module::c_types::c_int
+                crate::bindings::FaultFlags::SIGSEGV.bits()
             }
         }
     }

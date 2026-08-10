@@ -47,24 +47,32 @@ pmem_get_current_task(void)
   return current;
 }
 
-int pmem_call_walk_vma(struct vm_area_struct *vm, struct mm_walk *walk)
+int pmem_call_walk_vma(struct vm_area_struct *vma,
+                       const struct mm_walk_ops *ops,
+                       void *private)
 {
-  static int (*walk_vma_range)(struct vm_area_struct * vm,
-                               struct mm_walk * walk) = NULL;
-  if (!walk_vma_range)
-    walk_vma_range = (void *)pmem_lookup_name("walk_page_vma");
-  return (*walk_vma_range)(vm, walk);
+  static int (*walk_page_vma_fn)(struct vm_area_struct *vma,
+                                 const struct mm_walk_ops *ops,
+                                 void *private) = NULL;
+  if (!walk_page_vma_fn)
+    walk_page_vma_fn = (void *)pmem_lookup_name("walk_page_vma");
+  return (*walk_page_vma_fn)(vma, ops, private);
 }
 
-int pmem_call_walk_range(unsigned long addr,
+int pmem_call_walk_range(struct mm_struct *mm,
+                         unsigned long addr,
                          unsigned long end,
-                         struct mm_walk *walk)
+                         const struct mm_walk_ops *ops,
+                         void *private)
 {
-  static int (*walk_page_range)(
-      unsigned long addr, unsigned long end, struct mm_walk *walk) = NULL;
-  if (!walk_page_range)
-    walk_page_range = (void *)pmem_lookup_name("walk_page_range");
-  return (*walk_page_range)(addr, end, walk);
+  static int (*walk_page_range_fn)(struct mm_struct *mm,
+                                   unsigned long addr,
+                                   unsigned long end,
+                                   const struct mm_walk_ops *ops,
+                                   void *private) = NULL;
+  if (!walk_page_range_fn)
+    walk_page_range_fn = (void *)pmem_lookup_name("walk_page_range");
+  return (*walk_page_range_fn)(mm, addr, end, ops, private);
 }
 
 void pmem_flush_tlb_all(void)
@@ -343,6 +351,64 @@ unsigned int
 pmem_filemap_fault(struct vm_fault *vmf)
 {
   return filemap_fault(vmf);
+}
+
+struct vm_area_struct *
+pmem_vm_fault_get_vma(struct vm_fault *vmf)
+{
+  return vmf->vma;
+}
+
+unsigned long
+pmem_vm_fault_get_address(struct vm_fault *vmf)
+{
+  return vmf->address;
+}
+
+void
+pmem_vm_fault_set_page(struct vm_fault *vmf, struct page *page)
+{
+  vmf->page = page;
+}
+
+unsigned long
+pmem_vma_get_start(const struct vm_area_struct *vma)
+{
+  return vma->vm_start;
+}
+
+unsigned long
+pmem_vma_get_end(const struct vm_area_struct *vma)
+{
+  return vma->vm_end;
+}
+
+unsigned long
+pmem_vma_get_flags(const struct vm_area_struct *vma)
+{
+  return vma->vm_flags;
+}
+
+pgprot_t
+pmem_vma_get_prot(const struct vm_area_struct *vma)
+{
+  return vma->vm_page_prot;
+}
+
+void
+pmem_vma_mod_flags(struct vm_area_struct *vma,
+                   vm_flags_t set,
+                   vm_flags_t clear)
+{
+  mmap_write_lock(vma->vm_mm);
+  vm_flags_mod(vma, set, clear);
+  mmap_write_unlock(vma->vm_mm);
+}
+
+unsigned long
+pmem_mm_get_total_vm(const struct mm_struct *mm)
+{
+  return mm->total_vm;
 }
 
 // file related

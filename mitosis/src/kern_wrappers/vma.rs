@@ -2,7 +2,6 @@ use crate::bindings::{file, vm_area_struct, VMFlags};
 
 use super::mm::VirtAddrType;
 
-#[derive(Debug)]
 pub struct VMA<'a> {
     vma_inner: &'a mut vm_area_struct,
 }
@@ -48,27 +47,34 @@ impl<'a> VMA<'a> {
     }
 
     pub fn get_start(&self) -> VirtAddrType {
-        self.vma_inner.vm_start
+        unsafe { crate::bindings::pmem_vma_get_start(self.vma_inner as *const _) }
     }
 
     pub fn get_end(&self) -> VirtAddrType {
-        self.vma_inner.vm_end
+        unsafe { crate::bindings::pmem_vma_get_end(self.vma_inner as *const _) }
     }
 
     pub fn get_sz(&self) -> u64 {
-        self.vma_inner.vm_end - self.vma_inner.vm_start
+        self.get_end() - self.get_start()
     }
 
     pub fn get_prot(&self) -> crate::bindings::pgprot_t {
-        self.vma_inner.vm_page_prot
+        unsafe { crate::bindings::pmem_vma_get_prot(self.vma_inner as *const _) }
     }
 
     pub fn get_flags(&self) -> crate::bindings::VMFlags {
-        unsafe { crate::bindings::VMFlags::from_bits_unchecked(self.vma_inner.vm_flags) }
+        unsafe { crate::bindings::VMFlags::from_bits_unchecked(self.get_raw_flags()) }
     }
 
     pub fn set_raw_flags(&mut self, flags: crate::linux_kernel_module::c_types::c_ulong) {
-        self.vma_inner.vm_flags = flags;
+        let old_flags = self.get_raw_flags();
+        unsafe {
+            crate::bindings::pmem_vma_mod_flags(
+                self.vma_inner as *mut _,
+                flags & !old_flags,
+                old_flags & !flags,
+            );
+        }
     }
 
     pub fn set_alloc(&mut self) {
@@ -84,7 +90,7 @@ impl<'a> VMA<'a> {
     }
 
     pub fn get_raw_flags(&self) -> crate::linux_kernel_module::c_types::c_ulong {
-        self.vma_inner.vm_flags
+        unsafe { crate::bindings::pmem_vma_get_flags(self.vma_inner as *const _) }
     }
 
     pub fn get_mmap_flags(&self) -> crate::linux_kernel_module::c_types::c_ulong {

@@ -19,6 +19,7 @@ const INCLUDED_KERNEL_TYPES: &[&str] = &[
     "vm_area_struct",
     "vm_operations_struct",
     "mm_walk",
+    "mm_walk_ops",
     "vm_flags_t",
     "pgprot_t",
     "file_system_type",

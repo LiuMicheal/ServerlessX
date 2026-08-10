@@ -17,25 +17,24 @@ pub struct VMADumpIter<'a> {
 
 impl<'a> VMADumpIter<'a> {
     pub fn new(pt: &'a mut FlatPageTable) -> Self {
-        let mut walk: mm_walk = Default::default();
-        walk.test_walk = None;
-        walk.hugetlb_entry = None;
+        let mut walk_ops: mm_walk_ops = Default::default();
+        walk_ops.test_walk = None;
+        walk_ops.hugetlb_entry = None;
 
-        walk.pte_entry = Some(Self::handle_pte_entry);
+        walk_ops.pte_entry = Some(Self::handle_pte_entry);
 
         Self {
             flat_page_table: pt,
             count: 0,
-            engine: VMWalkEngine::new(walk),
+            engine: VMWalkEngine::new(walk_ops),
         }
     }
 
     pub fn execute(&mut self, vma: &VMA) -> usize {
-        // it's safe to pass self-reference here, the private is abandoned after the `self.engine.walk` call
-        self.engine.walk_callbacks.private =
-            self as *const _ as *mut crate::linux_kernel_module::c_types::c_void;
+        // The callback context is valid only for this synchronous walk.
+        let private = self as *mut _ as *mut crate::linux_kernel_module::c_types::c_void;
 
-        unsafe { self.engine.walk(vma.get_raw_ptr()) };
+        unsafe { self.engine.walk(vma.get_raw_ptr(), private) };
         self.count
     }
 
@@ -72,17 +71,17 @@ pub struct VMATraverseIter {
 
 impl VMATraverseIter {
     pub fn new() -> Self {
-        let mut walk: mm_walk = Default::default();
-        walk.test_walk = None;
-        walk.hugetlb_entry = None;
+        let mut walk_ops: mm_walk_ops = Default::default();
+        walk_ops.test_walk = None;
+        walk_ops.hugetlb_entry = None;
 
-        walk.pmd_entry = Some(Self::handle_pmd_entry);
-        walk.pte_entry = Some(Self::handle_pte_entry);
-        walk.pte_hole = Some(Self::handle_pte_hole);
+        walk_ops.pmd_entry = Some(Self::handle_pmd_entry);
+        walk_ops.pte_entry = Some(Self::handle_pte_entry);
+        walk_ops.pte_hole = Some(Self::handle_pte_hole);
 
         Self {
             mappings: Vec::new(),
-            engine: VMWalkEngine::new(walk),
+            engine: VMWalkEngine::new(walk_ops),
         }
     }
 
@@ -91,11 +90,10 @@ impl VMATraverseIter {
     pub fn execute(&mut self, vma: &VMA) -> &Vec<(VirtAddrType, PhyAddrType)> {
         self.mappings.clear();
 
-        // it's safe to pass self-reference here, the private is abandoned after the `self.engine.walk` call
-        self.engine.walk_callbacks.private =
-            self as *const _ as *mut crate::linux_kernel_module::c_types::c_void;
+        // The callback context is valid only for this synchronous walk.
+        let private = self as *mut _ as *mut crate::linux_kernel_module::c_types::c_void;
 
-        unsafe { self.engine.walk(vma.get_raw_ptr()) };
+        unsafe { self.engine.walk(vma.get_raw_ptr(), private) };
         &self.mappings
     }
 
@@ -117,6 +115,7 @@ impl VMATraverseIter {
     pub unsafe extern "C" fn handle_pte_hole(
         _addr: crate::linux_kernel_module::c_types::c_ulong,
         _next: crate::linux_kernel_module::c_types::c_ulong,
+        _depth: crate::linux_kernel_module::c_types::c_int,
         _walk: *mut mm_walk,
     ) -> crate::linux_kernel_module::c_types::c_int {
         // No need to implement now
@@ -139,32 +138,21 @@ impl VMATraverseIter {
 /// A simple wrapper for helping walking through the page tables
 #[derive(Debug)]
 pub struct VMWalkEngine {
-    walk_callbacks: mm_walk,
+    walk_ops: mm_walk_ops,
 }
 
 impl VMWalkEngine {
-    pub fn new(callbacks: mm_walk) -> Self {
-        Self {
-            walk_callbacks: callbacks,
-        }
+    pub fn new(ops: mm_walk_ops) -> Self {
+        Self { walk_ops: ops }
     }
 
     #[allow(non_camel_case_types)]
-    pub unsafe fn walk(&mut self, vma: *mut vm_area_struct) {
-        let vm = *vma;
-        self.walk_callbacks.vma = vma;
-        self.walk_callbacks.mm = vm.vm_mm;
-        self.walk_inner(vma, (*vma).vm_start, (*vma).vm_end);
-    }
-
-    #[allow(non_camel_case_types)]
-    unsafe fn walk_inner(
-        &mut self,
-        _vma: *mut vm_area_struct,
-        start: crate::linux_kernel_module::c_types::c_ulong,
-        end: crate::linux_kernel_module::c_types::c_ulong,
+    pub unsafe fn walk(
+        &self,
+        vma: *mut vm_area_struct,
+        private: *mut crate::linux_kernel_module::c_types::c_void,
     ) {
         // FIXME: not handling the error code
-        pmem_call_walk_range(start, end, &mut self.walk_callbacks as *mut _);
+        pmem_call_walk_vma(vma, &self.walk_ops as *const _, private);
     }
 }

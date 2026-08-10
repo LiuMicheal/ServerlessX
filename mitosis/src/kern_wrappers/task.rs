@@ -37,7 +37,7 @@ impl Task {
         vma_meta: &VMADescriptor,
         next_vma: core::option::Option<&VMADescriptor>,
     ) -> Option<&'static mut crate::bindings::vm_area_struct> {
-        use crate::bindings::{pmem_vm_mmap, VMFlags};
+        use crate::bindings::{pmem_vm_mmap, pmem_vma_mod_flags, VMFlags};
 
         let ret = {
             // we need to extend the VMA of heap & stack to avoid corrupting
@@ -81,16 +81,17 @@ impl Task {
             .find_vma(vma_meta.get_start())
             .unwrap();
         if vma_meta.is_stack() {
-            vma.vm_flags = (VMFlags::from_bits_unchecked(vma.vm_flags) | VMFlags::STACK).bits();
+            pmem_vma_mod_flags(vma as *mut _, VMFlags::STACK.bits(), 0);
         } else {
-            vma.vm_flags =
-                (VMFlags::from_bits_unchecked(vma.vm_flags) | VMFlags::DONTEXPAND).bits();
+            pmem_vma_mod_flags(vma as *mut _, VMFlags::DONTEXPAND.bits(), 0);
         }
         #[cfg(feature = "eager-resume")]
         {
-            vma.vm_flags = (crate::bindings::VMFlags::from_bits_unchecked(vma.vm_flags)
-                | crate::bindings::VMFlags::MIXEDMAP)
-                .bits();
+            pmem_vma_mod_flags(
+                vma as *mut _,
+                crate::bindings::VMFlags::MIXEDMAP.bits(),
+                0,
+            );
         }
         return Some(vma);
     }
