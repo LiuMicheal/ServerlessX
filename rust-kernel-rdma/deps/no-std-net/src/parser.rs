@@ -170,7 +170,7 @@ impl<'a> Parser<'a> {
                 return None;
             }
 
-            bs[i] = self.read_number(16, 4, 0xffff).map(|n| n as u16)?;
+            bs[i] = self.read_number(16, 4, 0x10000).map(|n| n as u16)?;
             i += 1;
         }
         Some(Guid::new(bs[0],bs[1],bs[2],bs[3],bs[4],bs[5],bs[6],bs[7]))

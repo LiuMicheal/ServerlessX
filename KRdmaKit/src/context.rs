@@ -13,6 +13,8 @@ pub struct Context {
     inner_device: DeviceRef,
     gid_index: usize,
     #[cfg(feature = "kernel")]
+    gid_attr: NonNull<ib_gid_attr>,
+    #[cfg(feature = "kernel")]
     lkey: u32,
     #[cfg(feature = "kernel")]
     rkey: u32,
@@ -84,11 +86,22 @@ impl Context {
     ) -> Result<ContextRef, ControlpathError> {
         #[cfg(feature = "kernel")]
         {
-            // first allocate a PD
-            let pd = NonNull::new(unsafe {
-                ib_alloc_pd(dev.raw_ptr().as_ptr(), IB_PD_UNSAFE_GLOBAL_RKEY)
+            let gid_attr = NonNull::new(unsafe {
+                bd_rdma_get_gid_attr(dev.raw_ptr().as_ptr(), 1, gid_index as _)
+                    as *mut ib_gid_attr
             })
-            .ok_or(ControlpathError::ContextError("pd", Error::EAGAIN))?;
+            .ok_or(ControlpathError::ContextError("gid_attr", Error::EINVAL))?;
+
+            // first allocate a PD
+            let pd = match NonNull::new(unsafe {
+                ib_alloc_pd(dev.raw_ptr().as_ptr(), IB_PD_UNSAFE_GLOBAL_RKEY)
+            }) {
+                Some(pd) => pd,
+                None => {
+                    unsafe { bd_rdma_put_gid_attr(gid_attr.as_ptr()) };
+                    return Err(ControlpathError::ContextError("pd", Error::EAGAIN));
+                }
+            };
 
             let (lkey, rkey) = unsafe {
                 let pd = pd.as_ref();
@@ -98,6 +111,7 @@ impl Context {
             Ok(Arc::new(Self {
                 inner_device: dev.clone(),
                 gid_index,
+                gid_attr,
                 lkey,
                 rkey,
                 pd,
@@ -123,6 +137,12 @@ impl Context {
     #[inline]
     pub fn gid_index(&self) -> usize {
         self.gid_index
+    }
+
+    #[cfg(feature = "kernel")]
+    #[inline]
+    pub fn gid_attr(&self) -> *const ib_gid_attr {
+        self.gid_attr.as_ptr() as *const ib_gid_attr
     }
 
     #[cfg(feature = "kernel")]
@@ -290,6 +310,8 @@ impl Drop for AddressHandler {
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
+            #[cfg(feature = "kernel")]
+            bd_rdma_put_gid_attr(self.gid_attr());
             ib_dealloc_pd(self.pd.as_ptr());
         }
     }

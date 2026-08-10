@@ -49,6 +49,7 @@ impl PreparedQueuePair {
 
         let req = ib_cm_req_param {
             primary_path: &mut path as *mut sa_path_rec,
+            ppath_sgid_attr: rc_qp_ref.ctx().gid_attr(),
             service_id: remote_service_id,
             qp_type: ib_qp_type::IB_QPT_RC,
             responder_resources: 16,

@@ -214,6 +214,7 @@ mod kernel_querier {
             let querier_inner_ref = unsafe { Arc::get_mut_unchecked(&mut querier_inner) };
             let req = ib_cm_sidr_req_param {
                 path: &path as *const _ as _,
+                sgid_attr: querier_inner_ref.ctx.gid_attr(),
                 service_id: remote_service_id,
                 timeout_ms: 20,
                 max_cm_retries: 3,

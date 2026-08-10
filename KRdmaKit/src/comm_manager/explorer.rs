@@ -81,6 +81,26 @@ impl Explorer {
         source_port_id: u8,
         dst_gid: ib_gid,
     ) -> Result<SubnetAdminPathRecord, CMError> {
+        #[cfg(BASE_INBOX_RDMA_5_14)]
+        {
+            let mut path: SubnetAdminPathRecord = Default::default();
+            let ret = bd_resolve_roce_path(
+                self.inner_dev.raw_ptr().as_ptr(),
+                source_port_id as _,
+                self.gid_index as _,
+                &dst_gid as *const _,
+                service_id,
+                &mut path as *mut _,
+            );
+            if ret != 0 {
+                log::error!("Failed to resolve RoCEv2 path with error {}", ret);
+                return Err(CMError::Creation(ret));
+            }
+            return Ok(path);
+        }
+
+        #[cfg(not(BASE_INBOX_RDMA_5_14))]
+        {
         self.done.init();
 
         // init an Subnet Administrator (SA) client
@@ -123,6 +143,7 @@ impl Explorer {
             })?;
 
         self.result.ok_or(CMError::Timeout)
+        }
     }
 }
 

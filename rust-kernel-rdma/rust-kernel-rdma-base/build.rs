@@ -33,6 +33,7 @@ const INCLUDED_KERNEL_TYPES: &[&str] = &[
     "ib_client",
     "ib_sa_client",
     "ib_gid",
+    "ib_gid_attr",
     "ib_pd",
     // CQ related
     "ib_cq_init_attr",

@@ -3,6 +3,7 @@
 #endif
 
 #include <rdma/ib_cm.h>
+#include <rdma/ib_addr.h>
 #include <rdma/ib_cache.h>
 #include <rdma/ib_sa.h>
 #include <rdma/ib_verbs.h>
@@ -20,6 +21,20 @@ path_rec_sgid(void);
 
 ib_sa_comp_mask
 path_rec_numb_path(void);
+
+#if defined(BASE_INBOX_RDMA_5_14)
+const struct ib_gid_attr *
+bd_rdma_get_gid_attr(struct ib_device *device, unsigned int port_num,
+                     int gid_index);
+
+void
+bd_rdma_put_gid_attr(const struct ib_gid_attr *attr);
+
+int
+bd_resolve_roce_path(struct ib_device *device, unsigned int port_num,
+                     int gid_index, const union ib_gid *dgid,
+                     __be64 service_id, struct sa_path_rec *path);
+#endif
 
 int
 bd_ib_poll_cq(struct ib_cq *cq, int num_entries, struct ib_wc *wc);
