@@ -36,9 +36,8 @@ endif
 
 all:
 	-cp -f $(OFA)/Module*.symvers $(PWD)/Module.symvers
-	$(MAKE) -C $(KDIR) M=$(CURDIR) CC=$(CC) CONFIG_CC_IS_CLANG=y
+	$(MAKE) -C $(KDIR) M=$(CURDIR) CC=$(CC)
 
 clean:
 	-rm $(PWD)/Module.symvers
 	$(MAKE) -C $(KDIR) M=$(CURDIR) CC=$(CC) clean
-
