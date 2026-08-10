@@ -13,5 +13,10 @@ $(src)/target/$(TARGET)/debug/lib%.a: cargo_will_determine_dependencies
 
 .PHONY: cargo_will_determine_dependencies
 
-%.rust.o: target/$(TARGET)/debug/lib%.a
-	$(LD) -r -o $@ --whole-archive $<
+quiet_cmd_rustld = LD [R]  $@
+      cmd_rustld = $(LD) -r -o $@ --whole-archive $(real-prereqs)
+
+$(obj)/%.rust.o: $(obj)/target/$(TARGET)/debug/lib%.a FORCE
+	$(call if_changed,rustld)
+
+targets += $(TEST_NAME).rust.o
