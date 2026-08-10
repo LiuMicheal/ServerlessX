@@ -157,6 +157,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CC");
     println!("cargo:rerun-if-env-changed=KDIR");
     println!("cargo:rerun-if-env-changed=c_flags");
+    println!("cargo:rerun-if-env-changed=MITOSIS_RDMA_ABI");
 
     let kernel_dir = env::var("KDIR").expect("Must be invoked from kernel makefile");
     let kernel_cflags = env::var("c_flags").expect("Add 'export c_flags' to Kbuild");
@@ -229,6 +230,7 @@ fn main() {
     builder.warnings(false);
     if env::var("MITOSIS_RDMA_ABI").as_deref() == Ok("inbox") {
         builder.define("CC_USING_FENTRY", None);
+        builder.flag("-mfentry");
     }
     println!("cargo:rerun-if-changed=src/helpers.c");
     builder.file("src/helpers.c");

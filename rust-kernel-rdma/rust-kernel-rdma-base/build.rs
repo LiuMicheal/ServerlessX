@@ -229,7 +229,10 @@ fn main() {
     builder.compiler(env::var("CC").unwrap_or_else(|_| "clang".to_string()));
     builder.target(&target);
     builder.warnings(false);
-    builder.define("CC_USING_FENTRY", None);
+    if env::var("MITOSIS_RDMA_ABI").as_deref() == Ok("inbox") {
+        builder.define("CC_USING_FENTRY", None);
+        builder.flag("-mfentry");
+    }
     builder.define(&ofed_ver, None);
     println!("cargo:rerun-if-changed=src/native/kernel_helper.c");
 
