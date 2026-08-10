@@ -1,12 +1,39 @@
 #include "./kernel_helper.h"
 
 #include <asm/pgalloc.h>
+#include <linux/rmap.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
 
 #include <linux/ptrace.h>
 #include <linux/cpumask.h>
 #include <linux/smp.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+#include <linux/kprobes.h>
+
+static unsigned long (*pmem_kallsyms_lookup_name)(const char *name);
+
+static unsigned long pmem_lookup_name(const char *name)
+{
+  if (!pmem_kallsyms_lookup_name)
+  {
+    struct kprobe kp = { .symbol_name = "kallsyms_lookup_name" };
+    int ret = register_kprobe(&kp);
+
+    if (ret)
+      return 0;
+    pmem_kallsyms_lookup_name = (void *)kp.addr;
+    unregister_kprobe(&kp);
+  }
+  return pmem_kallsyms_lookup_name(name);
+}
+#else
+static unsigned long pmem_lookup_name(const char *name)
+{
+  return kallsyms_lookup_name(name);
+}
+#endif
 
 struct thread_info *
 pmem_get_current_thread_info(void)
@@ -25,7 +52,7 @@ int pmem_call_walk_vma(struct vm_area_struct *vm, struct mm_walk *walk)
   static int (*walk_vma_range)(struct vm_area_struct * vm,
                                struct mm_walk * walk) = NULL;
   if (!walk_vma_range)
-    walk_vma_range = (void *)kallsyms_lookup_name("walk_page_vma");
+    walk_vma_range = (void *)pmem_lookup_name("walk_page_vma");
   return (*walk_vma_range)(vm, walk);
 }
 
@@ -36,7 +63,7 @@ int pmem_call_walk_range(unsigned long addr,
   static int (*walk_page_range)(
       unsigned long addr, unsigned long end, struct mm_walk *walk) = NULL;
   if (!walk_page_range)
-    walk_page_range = (void *)kallsyms_lookup_name("walk_page_range");
+    walk_page_range = (void *)pmem_lookup_name("walk_page_range");
   return (*walk_page_range)(addr, end, walk);
 }
 
@@ -44,7 +71,7 @@ void pmem_flush_tlb_all(void)
 {
   static void (*k_flush_tlb_all)(void) = NULL;
   if (!k_flush_tlb_all)
-    k_flush_tlb_all = (void *)kallsyms_lookup_name("flush_tlb_all");
+    k_flush_tlb_all = (void *)pmem_lookup_name("flush_tlb_all");
   if (!k_flush_tlb_all)
   {
     printk(KERN_ERR "kernel-helper error: "
@@ -56,39 +83,59 @@ void pmem_flush_tlb_all(void)
 
 void pmem_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+  static void (*k_flush_tlb_mm_range)(struct mm_struct * mm, unsigned long start,
+                                      unsigned long end, unsigned int stride_shift,
+                                      bool freed_tables) = NULL;
+#else
   static void (*k_flush_tlb_mm_range)(struct mm_struct * mm, unsigned long start,
                                       unsigned long end, unsigned long vmflag) = NULL;
+#endif
   if (!k_flush_tlb_mm_range)
-    k_flush_tlb_mm_range = (void *)kallsyms_lookup_name("flush_tlb_mm_range");
+    k_flush_tlb_mm_range = (void *)pmem_lookup_name("flush_tlb_mm_range");
   if (!k_flush_tlb_mm_range)
   {
     printk(KERN_ERR "kernel-helper error: "
                     "can't find kernel function flush_tlb_mm_range\n");
     return;
   }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+  (*k_flush_tlb_mm_range)(vma->vm_mm, start, end, PAGE_SHIFT, false);
+#else
   (*k_flush_tlb_mm_range)(vma->vm_mm, start, end, vma->vm_flags);
+#endif
 }
 
 void pmem_flush_tlb_mm(struct mm_struct *mm)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+  static void (*k_flush_tlb_mm_range)(struct mm_struct * mm, unsigned long start,
+                                      unsigned long end, unsigned int stride_shift,
+                                      bool freed_tables) = NULL;
+#else
   static void (*k_flush_tlb_mm_range)(struct mm_struct * mm, unsigned long start,
                                       unsigned long end, unsigned long vmflag) = NULL;
+#endif
   if (!k_flush_tlb_mm_range)
-    k_flush_tlb_mm_range = (void *)kallsyms_lookup_name("flush_tlb_mm_range");
+    k_flush_tlb_mm_range = (void *)pmem_lookup_name("flush_tlb_mm_range");
   if (!k_flush_tlb_mm_range)
   {
     printk(KERN_ERR "kernel-helper error: "
                     "can't find kernel function flush_tlb_mm_range\n");
     return;
   }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+  (*k_flush_tlb_mm_range)(mm, 0UL, TLB_FLUSH_ALL, 0U, true);
+#else
   (*k_flush_tlb_mm_range)(mm, 0UL, TLB_FLUSH_ALL, 0UL);
+#endif
 }
 
 long pmem_do_arch_prctl_64(struct task_struct *task, int option, unsigned long arg2)
 {
   static long (*do_arch_prctl_64)(struct task_struct * task, int option, unsigned long arg2) = NULL;
   if (!do_arch_prctl_64)
-    do_arch_prctl_64 = (void *)kallsyms_lookup_name("do_arch_prctl_64");
+    do_arch_prctl_64 = (void *)pmem_lookup_name("do_arch_prctl_64");
   return (*do_arch_prctl_64)(task, option, arg2);
 }
 
@@ -116,7 +163,19 @@ pmem_get_pte(struct mm_struct *mm, unsigned long addr)
   pmd = pmd_offset(pud, addr);
   if (pmd_none(*pmd) || pmd_bad(*pmd))
     return 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+  {
+    static pte_t *(*k_pte_offset_map)(pmd_t *pmd, unsigned long addr,
+                                      pmd_t *pmdvalp) = NULL;
+    if (!k_pte_offset_map)
+      k_pte_offset_map = (void *)pmem_lookup_name("__pte_offset_map");
+    if (!k_pte_offset_map)
+      return 0;
+    pte = k_pte_offset_map(pmd, addr, NULL);
+  }
+#else
   pte = pte_offset_map(pmd, addr);
+#endif
   if (unlikely(pte_none(*pte)))
     return 0;
   return pte;
@@ -179,7 +238,7 @@ int pmem_do_munmap(struct mm_struct *mm,
                      size_t len,
                      struct list_head *uf) = NULL;
   if (!func)
-    func = (void *)kallsyms_lookup_name("do_munmap");
+    func = (void *)pmem_lookup_name("do_munmap");
   return (*func)(mm, start, len, uf);
 }
 
@@ -301,12 +360,23 @@ void pmem_put_file(struct file *f)
 
 static inline void page_free_rmap(struct page *page, bool compound)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+  if (compound)
+    atomic_dec(&((struct folio *)page)->_entire_mapcount);
+  else
+    atomic_dec(&page->_mapcount);
+#else
   atomic_dec(compound ? compound_mapcount_ptr(page) : &page->_mapcount);
+#endif
 }
 
 static inline void page_dup_rmap(struct page *page, bool compound)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+  __page_dup_rmap(page, compound);
+#else
   atomic_inc(compound ? compound_mapcount_ptr(page) : &page->_mapcount);
+#endif
 }
 
 void pmem_page_dup_rmap(struct page *page, bool compound)

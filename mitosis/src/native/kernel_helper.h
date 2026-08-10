@@ -5,13 +5,20 @@
 #include <linux/mm.h>
 #include <linux/mm_types.h>
 #include <linux/mman.h>
+#include <linux/pagewalk.h>
 #include <linux/sched.h>
 #include <linux/thread_info.h>
+#include <linux/version.h>
 
 #include <asm/pgtable_types.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+extern void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
+                               unsigned long end, unsigned int stride_shift,
+                               bool freed_tables);
+#endif
+#include <asm/tlbflush.h>
 #include <asm/tlb.h>
 #include <linux/vmalloc.h>
-#include <asm/tlbflush.h>
 
 #include <linux/gfp.h>
 
