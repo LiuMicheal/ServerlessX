@@ -12,6 +12,16 @@ pub struct MemoryDescriptor {
     mm_inner: &'static mut mm_struct,
 }
 
+pub struct MMReadGuard {
+    mm: *mut mm_struct,
+}
+
+impl Drop for MMReadGuard {
+    fn drop(&mut self) {
+        unsafe { crate::bindings::pmem_mmap_read_unlock(self.mm) };
+    }
+}
+
 /// taken from /include/uapi/linux/mman.h in the linux kernel
 #[allow(dead_code)]
 pub mod mmap_flags {
@@ -29,6 +39,12 @@ impl MemoryDescriptor {
 
     pub fn get_vma_iter(&self) -> VMAIter {
         VMAIter::new(self)
+    }
+
+    pub fn read_lock(&self) -> MMReadGuard {
+        let mm = self.mm_inner as *const _ as *mut mm_struct;
+        unsafe { crate::bindings::pmem_mmap_read_lock(mm) };
+        MMReadGuard { mm }
     }
 
     pub fn find_vma(

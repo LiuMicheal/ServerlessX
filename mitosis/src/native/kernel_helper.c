@@ -405,6 +405,18 @@ pmem_vma_mod_flags(struct vm_area_struct *vma,
   mmap_write_unlock(vma->vm_mm);
 }
 
+void
+pmem_mmap_read_lock(struct mm_struct *mm)
+{
+  mmap_read_lock(mm);
+}
+
+void
+pmem_mmap_read_unlock(struct mm_struct *mm)
+{
+  mmap_read_unlock(mm);
+}
+
 unsigned long
 pmem_mm_get_total_vm(const struct mm_struct *mm)
 {

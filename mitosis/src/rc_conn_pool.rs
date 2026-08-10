@@ -93,7 +93,13 @@ impl<'a> RCPool {
 
         let rc_factory = unsafe { crate::get_rc_factory_ref(i) }.expect("fatal, should not fail to get rc factory");
         
-        let gid = Explorer::string_to_gid(&info.gid).expect("Failed to convert string to ib_gid");
+        let gid = match Explorer::string_to_gid(&info.gid) {
+            Ok(gid) => gid,
+            Err(err) => {
+                crate::log::error!("Failed to convert GID {}: {:?}", &info.gid, err);
+                return None;
+            }
+        };
         let conn_meta = os_network::rdma::ConnMeta {
             gid: gid,
             service_id: info.service_id,

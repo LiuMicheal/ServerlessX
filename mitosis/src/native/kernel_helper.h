@@ -128,6 +128,10 @@ pmem_vma_mod_flags(struct vm_area_struct *vma,
                    vm_flags_t set,
                    vm_flags_t clear);
 
+void pmem_mmap_read_lock(struct mm_struct *mm);
+
+void pmem_mmap_read_unlock(struct mm_struct *mm);
+
 unsigned long
 pmem_mm_get_total_vm(const struct mm_struct *mm);
 /*

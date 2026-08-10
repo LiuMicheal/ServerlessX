@@ -114,7 +114,11 @@ impl Service {
             let qd_hint = Self::calculate_qd_hint(i);
 
             res.connect_infos.push(HandlerConnectInfo {
-                gid: Explorer::gid_to_string(&local_context.query_gid(config.default_nic_port, 0).ok()?),
+                gid: Explorer::gid_to_string(
+                    &local_context
+                        .query_gid(config.default_nic_port, config.gid_index)
+                        .ok()?,
+                ),
                 service_id: crate::rdma_context::SERVICE_ID_BASE + nic_to_use as u64,
                 qd_hint: qd_hint,
                 local_port: config.default_nic_port,
@@ -156,7 +160,11 @@ impl Service {
             let qd_hint = Self::calculate_qd_hint(i);
 
             res.connect_infos.push(HandlerConnectInfo {
-                gid: Explorer::gid_to_string(&local_context.query_gid(config.default_nic_port, 0).unwrap()),
+                gid: Explorer::gid_to_string(
+                    &local_context
+                        .query_gid(config.default_nic_port, config.gid_index)
+                        .unwrap(),
+                ),
                 service_id: crate::rdma_context::SERVICE_ID_BASE + nic_to_use as u64,
                 qd_hint: qd_hint,
                 local_port: config.default_nic_port,
@@ -225,7 +233,9 @@ impl Service {
         crate::log::info!(
             "MITOSIS RPC thread {} started, listing on gid: {:?}",
             arg.id,
-            local_context.query_gid(1, 0).unwrap(), // WTX: use the default port to query gid
+            local_context
+                .query_gid(1, local_context.gid_index())
+                .unwrap(),
         );
 
         let server_ud = unsafe {

@@ -60,6 +60,8 @@ const INCLUDED_KERNEL_FUNCS: &[&str] = &[
     "pmem_vma_get_flags",
     "pmem_vma_get_prot",
     "pmem_vma_mod_flags",
+    "pmem_mmap_read_lock",
+    "pmem_mmap_read_unlock",
     "memcpy",
     // mmap related
     "pmem_do_munmap",
@@ -186,6 +188,7 @@ fn main() {
             "-mno-fp-ret-in-387",
             "-mpreferred-stack-boundary=3",
             "-mskip-rax-setup",
+            "-mindirect-branch-cs-prefix",
             "-mfunction-return=thunk-extern",
             "-fconserve-stack",
             "-mrecord-mcount",

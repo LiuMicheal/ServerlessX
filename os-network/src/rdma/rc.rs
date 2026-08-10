@@ -62,7 +62,10 @@ impl crate::conn::Factory for RCFactory {
             .allow_remote_atomic()
             .set_port_num(meta.port);
         let client_qp = builder.build_rc()?;
-        let explorer = Explorer::new(self.rctx.get_dev_ref());
+        let explorer = Explorer::new_with_gid_index(
+            self.rctx.get_dev_ref(),
+            self.rctx.gid_index(),
+        );
         let path = unsafe {
             explorer.resolve_inner(meta.service_id, meta.port, meta.gid)
         }?;

@@ -68,7 +68,8 @@ impl<'a> CallerPool<'a> {
     ) -> core::option::Option<()> {
         // fetch by sidr connect
         let meta = self.create_meta_at(idx, meta)?;
-        let my_gid = self.contexts.get(idx).unwrap().query_gid(1, 0).unwrap();
+        let context = self.contexts.get(idx).unwrap();
+        let my_gid = context.query_gid(1, context.gid_index()).unwrap();
         let (hint, service_id) = self.metas.get(idx).unwrap().clone();
 
         let caller = self.get_caller(idx)?;

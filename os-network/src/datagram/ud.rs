@@ -174,7 +174,10 @@ impl crate::conn::MetaFactory for UDFactory {
     fn create_meta(&self, meta: Self::HyperMeta) -> Result<Self::Meta, Self::MetaResult> {
         let (gid, service_id, qd_hint, local_port) =
             (meta.gid, meta.service_id, meta.qd_hint, meta.local_port);
-        let explorer = Explorer::new(self.get_context().get_dev_ref());
+        let explorer = Explorer::new_with_gid_index(
+            self.get_context().get_dev_ref(),
+            self.get_context().gid_index(),
+        );
         let path = unsafe { explorer.resolve_inner(service_id, local_port, gid) }?;
         let querier = DatagramEndpointQuerier::create(&self.get_context(), local_port)?;
         let endpoint = querier.query(service_id, qd_hint, path)?;

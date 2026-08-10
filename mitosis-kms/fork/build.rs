@@ -78,6 +78,7 @@ fn main() {
             "-mno-fp-ret-in-387",
             "-mpreferred-stack-boundary=3",
             "-mskip-rax-setup",
+            "-mindirect-branch-cs-prefix",
             "-mfunction-return=thunk-extern",
             "-fconserve-stack",
             "-mrecord-mcount",

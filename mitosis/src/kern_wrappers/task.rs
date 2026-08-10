@@ -119,6 +119,7 @@ impl Task {
         let mut vmas = alloc::vec::Vec::new();
 
         let mm = self.get_memory_descriptor();
+        let _mmap_guard = mm.read_lock();
         let vma_iters = mm.get_vma_iter();
 
         let mut total_counts = 0;

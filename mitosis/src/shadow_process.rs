@@ -40,6 +40,7 @@ impl ShadowProcess {
         // the generation process
         let task = crate::kern_wrappers::task::Task::new();
         let mut mm = task.get_memory_descriptor();
+        let _mmap_guard = mm.read_lock();
 
         for vma in mm.get_vma_iter() {
             vma_descriptors.push(vma.generate_descriptor());
@@ -77,6 +78,7 @@ impl ShadowProcess {
         // the generation process
         let task = crate::kern_wrappers::task::Task::new();
         let mm = task.get_memory_descriptor();
+        let _mmap_guard = mm.read_lock();
 
         // crate::log::debug!("before iterating the VMAs");
         for vma in mm.get_vma_iter() {
@@ -109,4 +111,3 @@ impl ShadowProcess {
 pub mod vma;
 pub mod page_table;
 pub mod page;
-

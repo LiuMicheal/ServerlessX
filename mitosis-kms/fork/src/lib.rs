@@ -13,6 +13,8 @@ use mitosis::syscalls::*;
 use mitosis_macros::declare_module_param; 
 
 declare_module_param!(mac_id, u64);
+declare_module_param!(gid_index, u64);
+declare_module_param!(peer_mac, u64);
 
 /// The module corresponding to the kernel module lifetime
 #[allow(dead_code)]
@@ -26,7 +28,14 @@ impl linux_kernel_module::KernelModule for Module {
     /// Called by the kernel upon the kernel module creation
     fn init() -> linux_kernel_module::KernelResult<Self> {
         let id = mac_id::read();
-        log::info!("Remote fork kernel module assigned ID={}", id);
+        let gid_index = gid_index::read();
+        let peer_mac = peer_mac::read();
+        log::info!(
+            "Remote fork kernel module assigned ID={}, GID index={}, peer MAC={:012x}",
+            id,
+            gid_index,
+            peer_mac
+        );
 
         // Currently, we use a default configuration of MITOSIS
         let mut config: mitosis::Config = Default::default();
@@ -34,7 +43,9 @@ impl linux_kernel_module::KernelModule for Module {
         config
             .set_num_nics_used(1)
             .set_rpc_threads(2)
-            .set_machine_id(id as usize);
+            .set_machine_id(id as usize)
+            .set_gid_index(gid_index as usize)
+            .set_peer_mac(peer_mac);
 
         #[cfg(feature = "legacy_dct")]
         config.set_init_dc_targets(12);
@@ -42,8 +53,10 @@ impl linux_kernel_module::KernelModule for Module {
         assert!(start_instance(config.clone()).is_some());
         let service = SysCallsService::<MitosisSysCallHandler>::new()?;
         log::info!(
-            "MITOSIS_EVENT version=1 event=module_init status=ok machine_id={} control={} data={}",
+            "MITOSIS_EVENT version=1 event=module_init status=ok machine_id={} gid_index={} peer_mac={:012x} control={} data={}",
             id,
+            gid_index,
+            peer_mac,
             mitosis::CONTROL_TRANSPORT,
             mitosis::DATA_TRANSPORT
         );
