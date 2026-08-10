@@ -1,7 +1,7 @@
 # Current status
 
 This page is the concise source of truth for release-scope statements in talks,
-papers, demos, and repository descriptions. It was last reviewed on 2026-08-08.
+papers, demos, and repository descriptions. It was last reviewed on 2026-08-10.
 When prose and executable profiles disagree, the narrower profile claim wins.
 
 ## Access and licensing
@@ -27,7 +27,8 @@ visible source preview and retain the licensing warning.
 | TinyLlama CUDA/TCP workload | Yes | Hardware-free tests | Inspectable source; not declared hardware-ready |
 | SPD native GDR | C++ source and build rules | Build and probes compile on a prepared host | Buildable boundary; no repository-packaged transfer result |
 | rfork userspace runtime | C source and tests | Injected-I/O unit tests | Checked userspace ABI; no bundled kernel module |
-| Mitosis and PhOS backends | No; identity records only | Historical controlled-lab context | External, separately supplied research backends |
+| Mitosis backend | No; identity record only | Private exact-Guest 5.14 compile gate; module not bundled or loaded | External, compile-only research backend |
+| PhOS backend | No; identity record only | Historical controlled-lab context | External, separately supplied research backend |
 | Wiseswap | Status page only | No implementation or profile | Research lineage and roadmap only |
 | ServerlessRec | Status page only | No implementation or profile | RDMA Map research lineage and roadmap only |
 | ServerlessLSM | Status page only | No implementation or profile | RDMA mmap research lineage and roadmap only |

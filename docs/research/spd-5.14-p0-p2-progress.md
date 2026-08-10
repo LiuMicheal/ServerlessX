@@ -42,32 +42,36 @@ Raw logs, VM definitions, internal inventory, checkpoint images, binaries,
 models, and kernel modules are intentionally excluded from this repository.
 They are referenced through private SHA-256 manifests.
 
-## P1 starting point
+## P1 compile gate result
 
-The port does not restart from Mitosis upstream `main`. The preserved research
-integration already contains the pure-RC SPD commits and three compile
-attempts:
+The port did not restart from Mitosis upstream `main`. The preserved pure-RC
+integration and the historical attempt21-23 logs were recovered into a clean
+worktree. The remaining Linux 4.15 to RHEL/Rocky 5.14 MM work covered
+`vm_fault_t`, KABI-wrapped MM/VMA fields, `mm_walk_ops`, page-walk callbacks,
+VMA flag helpers, and the Rust-object Kbuild rule.
 
-- the first attempt reduced the inbox-RDMA failures to one bindgen entry;
-- the second exposed 13 KRdmaKit API differences;
-- the third compiled the RDMA/KRdmaKit layer and exposed 36 Mitosis MM
-  ABI/layout errors.
+The clean parent source revision was `1732c276a7e7967b7d4e4a76231b366c0be3f7a7`
+with clean KRCore/RDMA dependency revision
+`9cd80aef81b75ec81e1bb9a6055355779a80d289`. Against the exact SPD Guest kernel
+`5.14.0-687.10.1.el9_8.0.1.x86_64`, the `krdma-test cow use_rc` build with
+`--no-default-features` and `MITOSIS_RDMA_ABI=inbox` produced `fork.ko`.
 
-The remaining compile work is therefore the Linux 4.15 to RHEL/Rocky 5.14 MM
-port: `vm_fault_t`, KABI-wrapped MM/VMA fields, `mm_walk_ops`, page-table
-helpers, and TLB helpers. Existing research-tree changes must first be
-recovered into an isolated worktree without modifying the preserved source.
+The compile gate passed: modpost reported no unresolved symbols and
+`modinfo` reported the exact target vermagic
+`5.14.0-687.10.1.el9_8.0.1.x86_64 SMP preempt mod_unload modversions`.
+The artifact SHA-256 is
+`b3ed2adac39583197c1fba52c44917f2bf6530e5f6a86f1ec7e9232b6dccc8ab`.
+The binary, raw logs, VM details, and manifests remain private; only this
+sanitized provenance is recorded here. BTF generation was skipped because the
+Guest did not expose `vmlinux`.
 
 ## P2 safety gate
 
-No kernel module has been loaded. Before the first single-guest test, the
-build must provide:
-
-- an exact guest-kernel vermagic match;
-- no unresolved symbols;
-- the source revision, build manifest, full log, and module SHA-256;
-- explicit load, test, unload, and failure-recovery commands for one named
-  test guest.
+No kernel module has been loaded. P1 is compile-only and is not evidence that
+CPU fork works at runtime. Before the first single-guest test, review the
+VMA-tree/page-walk locking path and prepare explicit load, test, unload, and
+failure-recovery commands for one named test guest. Keep the current GDR and
+PhOS baselines untouched while doing so.
 
 Host GPU, VF, ACS, IOMMU, storage, and network configuration are not part of
 the single-guest CPU fork gate.

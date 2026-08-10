@@ -9,7 +9,8 @@
   "upstream_license": "MIT",
   "integration_revisions": [
     "7094c238990b19d81cfcefd9c58ce865581e5a7d",
-    "3cb43a0a528392d8499da65449c43c15013f8ef7"
+    "3cb43a0a528392d8499da65449c43c15013f8ef7",
+    "1732c276a7e7967b7d4e4a76231b366c0be3f7a7"
   ],
   "build_artifact": "fork.ko",
   "blocking_dependencies": [
@@ -18,5 +19,16 @@
       "revision": "c0ca11582dc6937fc274e805fa696762d39e08f7",
       "license": "NOASSERTION"
     }
-  ]
+  ],
+  "private_lab_validation": {
+    "source_revision": "1732c276a7e7967b7d4e4a76231b366c0be3f7a7",
+    "rdma_dependency_revision": "9cd80aef81b75ec81e1bb9a6055355779a80d289",
+    "kernel_release": "5.14.0-687.10.1.el9_8.0.1.x86_64",
+    "artifact_sha256": "b3ed2adac39583197c1fba52c44917f2bf6530e5f6a86f1ec7e9232b6dccc8ab",
+    "vermagic": "5.14.0-687.10.1.el9_8.0.1.x86_64 SMP preempt mod_unload modversions",
+    "compile_only": true,
+    "bundled": false,
+    "runtime_loaded": false,
+    "modpost_unresolved": false
+  }
 }

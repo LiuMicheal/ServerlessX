@@ -15,6 +15,8 @@ Use the documents in this order:
    [open-source roadmap](research/open-source-roadmap.md) for context.
 8. [Discussion and action record](research/discussion-and-action-record-2026-08-07.md)
    for the decisions and work through the native-core import.
+9. [SPD 5.14 P0-P2 progress](research/spd-5.14-p0-p2-progress.md) for the
+   sanitized compile gate and research boundary.
 
 Documentation describes the boundary that the code and profile declarations
 actually support. When evidence and prose disagree, the narrower claim wins

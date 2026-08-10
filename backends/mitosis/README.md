@@ -12,3 +12,11 @@ portable or ASF release.
 
 Any future patch publication must be regenerated from the real commits, retain
 the Mitosis MIT notice and authors, and exclude KRCore source and binaries.
+
+## Private 5.14 build status
+
+The SPD lab has a compile-only `fork.ko` build for the exact Guest kernel
+`5.14.0-687.10.1.el9_8.0.1.x86_64`. The artifact is not bundled here, has not
+been loaded, and does not establish runtime fork support. The clean source
+provenance and artifact hash are recorded in the private lab evidence; P2
+runtime validation remains pending.
