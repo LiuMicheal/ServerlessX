@@ -77,8 +77,6 @@ pub struct Config {
 
     pub gid_index: usize,
 
-    pub peer_mac: u64,
-
     pub num_nics_used: usize,
 
     pub rpc_threads_num: usize,
@@ -103,7 +101,6 @@ impl Default for Config {
         Self {
             default_nic_port: 1,
             gid_index: 0,
-            peer_mac: 0,
             num_nics_used: 1,
             rpc_threads_num: 2,
             machine_id: 0,
@@ -125,11 +122,6 @@ impl Config {
 
     pub fn set_gid_index(&mut self, gid_index: usize) -> &mut Self {
         self.gid_index = gid_index;
-        self
-    }
-
-    pub fn set_peer_mac(&mut self, peer_mac: u64) -> &mut Self {
-        self.peer_mac = peer_mac;
         self
     }
 

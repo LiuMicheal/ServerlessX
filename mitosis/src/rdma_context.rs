@@ -31,10 +31,7 @@ pub fn start_rdma(config: &crate::Config) -> core::option::Option<()> {
                     .devices()
                     .get(i)
                     .expect("no available RDMA NIC")
-                    .open_context_with_gid_index_and_peer_mac(
-                        config.gid_index,
-                        config.peer_mac,
-                    )
+                    .open_context_with_gid_index(config.gid_index)
                     .expect("failed to create RDMA context"),
             );
         }
