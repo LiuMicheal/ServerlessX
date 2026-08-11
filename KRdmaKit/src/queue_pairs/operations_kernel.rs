@@ -393,20 +393,31 @@ impl QueuePair {
                 | ib_qp_attr_mask::IB_QP_RQ_PSN
                 | ib_qp_attr_mask::IB_QP_MAX_DEST_RD_ATOMIC
                 | ib_qp_attr_mask::IB_QP_MIN_RNR_TIMER;
-            let mut ah_attr = rdma_ah_attr {
-                type_: rdma_ah_attr_type::RDMA_AH_ATTR_TYPE_IB,
-                sl: 0,
-                port_num: self.port_num as _,
-                ..Default::default()
+            #[cfg(BASE_INBOX_RDMA_5_14)]
+            let ah_attr = self.ctx().resolve_address_attr(
+                self.port_num,
+                self.ctx().gid_index(),
+                gid,
+            )?;
+
+            #[cfg(not(BASE_INBOX_RDMA_5_14))]
+            let ah_attr = {
+                let mut attr = rdma_ah_attr {
+                    type_: rdma_ah_attr_type::RDMA_AH_ATTR_TYPE_IB,
+                    sl: 0,
+                    port_num: self.port_num as _,
+                    ..Default::default()
+                };
+                unsafe { bd_rdma_ah_set_dlid(&mut attr, lid) };
+                attr.grh.sgid_index = self.ctx().gid_index() as _;
+                attr.grh.flow_label = 0;
+                attr.grh.hop_limit = 255;
+                unsafe {
+                    attr.grh.dgid.global.subnet_prefix = gid.global.subnet_prefix;
+                    attr.grh.dgid.global.interface_id = gid.global.interface_id;
+                }
+                attr
             };
-            unsafe { bd_rdma_ah_set_dlid(&mut ah_attr, lid) };
-            ah_attr.grh.sgid_index = self.ctx().gid_index() as _;
-            ah_attr.grh.flow_label = 0;
-            ah_attr.grh.hop_limit = 255;
-            unsafe {
-                ah_attr.grh.dgid.global.subnet_prefix = gid.global.subnet_prefix;
-                ah_attr.grh.dgid.global.interface_id = gid.global.interface_id;
-            }
             let mut rtr_attr = ib_qp_attr {
                 qp_state: ib_qp_state::IB_QPS_RTR,
                 path_mtu: self.path_mtu,
@@ -419,6 +430,10 @@ impl QueuePair {
             };
             let ret =
                 unsafe { ib_modify_qp(self.inner_qp.as_ptr(), &mut rtr_attr as *mut _, mask as _) };
+            #[cfg(BASE_INBOX_RDMA_5_14)]
+            unsafe {
+                rdma_destroy_ah_attr(&mut rtr_attr.ah_attr as *mut _);
+            }
             if ret != 0 {
                 log::error!("Bring up rc inner, init=>rtr error");
                 return Err(ControlpathError::CreationError(

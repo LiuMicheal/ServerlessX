@@ -172,7 +172,9 @@ fn main() {
 
     builder = builder.clang_arg(format!("--target={}", target));
     if env::var("MITOSIS_RDMA_ABI").as_deref() == Ok("inbox") {
-        builder = builder.clang_arg("-DCC_USING_FENTRY");
+        builder = builder
+            .clang_arg("-DCC_USING_FENTRY")
+            .clang_arg("-DBASE_INBOX_RDMA_5_14");
     }
     for arg in kernel_args.iter() {
         if ![
@@ -180,7 +182,10 @@ fn main() {
             "-mpreferred-stack-boundary=3",
             "-mskip-rax-setup",
             "-mindirect-branch-cs-prefix",
+            "-mindirect-branch=thunk-extern",
+            "-mindirect-branch-register",
             "-mfunction-return=thunk-extern",
+            "-fno-allow-store-data-races",
             "-fconserve-stack",
             "-mrecord-mcount",
         ]

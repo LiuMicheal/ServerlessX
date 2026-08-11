@@ -150,7 +150,10 @@ fn main() {
             "-mpreferred-stack-boundary=3",
             "-mskip-rax-setup",
             "-mindirect-branch-cs-prefix",
+            "-mindirect-branch=thunk-extern",
+            "-mindirect-branch-register",
             "-mfunction-return=thunk-extern",
+            "-fno-allow-store-data-races",
             "-fconserve-stack",
             "-mrecord-mcount",
         ]

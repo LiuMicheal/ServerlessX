@@ -185,21 +185,29 @@ impl Context {
 
         #[cfg(feature = "kernel")]
         {
-            ah_attr.type_ = rdma_ah_attr_type::RDMA_AH_ATTR_TYPE_IB;
-
-            unsafe {
-                bd_rdma_ah_set_dlid(&mut ah_attr, lid as u32);
+            #[cfg(BASE_INBOX_RDMA_5_14)]
+            {
+                ah_attr = self.resolve_address_attr(port_num, gid_idx, gid)?;
             }
 
-            ah_attr.sl = 0;
-            ah_attr.port_num = port_num as _;
-            ah_attr.grh.sgid_index = gid_idx as _;
-            ah_attr.grh.flow_label = 0;
-            ah_attr.grh.hop_limit = 255;
+            #[cfg(not(BASE_INBOX_RDMA_5_14))]
+            {
+                ah_attr.type_ = rdma_ah_attr_type::RDMA_AH_ATTR_TYPE_IB;
 
-            unsafe {
-                ah_attr.grh.dgid.global.subnet_prefix = gid.global.subnet_prefix;
-                ah_attr.grh.dgid.global.interface_id = gid.global.interface_id;
+                unsafe {
+                    bd_rdma_ah_set_dlid(&mut ah_attr, lid as u32);
+                }
+
+                ah_attr.sl = 0;
+                ah_attr.port_num = port_num as _;
+                ah_attr.grh.sgid_index = gid_idx as _;
+                ah_attr.grh.flow_label = 0;
+                ah_attr.grh.hop_limit = 255;
+
+                unsafe {
+                    ah_attr.grh.dgid.global.subnet_prefix = gid.global.subnet_prefix;
+                    ah_attr.grh.dgid.global.interface_id = gid.global.interface_id;
+                }
             }
         }
 
@@ -219,6 +227,11 @@ impl Context {
 
         let ptr = unsafe { rdma_create_ah_wrapper(self.get_pd().as_ptr(), &mut ah_attr as _) };
 
+        #[cfg(all(feature = "kernel", BASE_INBOX_RDMA_5_14))]
+        unsafe {
+            rdma_destroy_ah_attr(&mut ah_attr as *mut _);
+        }
+
         if unsafe { ptr_is_err(ptr as _) } > 0 {
             Err(ControlpathError::CreationError(
                 "AddressHandler",
@@ -231,6 +244,63 @@ impl Context {
                 inner: unsafe { NonNull::new_unchecked(ptr) },
             })
         }
+    }
+}
+
+#[cfg(all(feature = "kernel", BASE_INBOX_RDMA_5_14))]
+impl Context {
+    pub(crate) fn resolve_address_attr(
+        &self,
+        port_num: u8,
+        gid_idx: usize,
+        gid: ib_gid,
+    ) -> Result<rdma_ah_attr, ControlpathError> {
+        let gid_attr = NonNull::new(unsafe {
+            bd_rdma_get_gid_attr(
+                self.inner_device.raw_ptr().as_ptr(),
+                port_num as _,
+                gid_idx as _,
+            ) as *mut ib_gid_attr
+        })
+        .ok_or(ControlpathError::ContextError("gid_attr", Error::EINVAL))?;
+
+        let mut path: sa_path_rec = Default::default();
+        let ret = unsafe {
+            bd_resolve_roce_path(
+                self.inner_device.raw_ptr().as_ptr(),
+                port_num as _,
+                gid_idx as _,
+                &gid as *const _,
+                0,
+                &mut path as *mut _,
+            )
+        };
+        if ret != 0 {
+            unsafe { bd_rdma_put_gid_attr(gid_attr.as_ptr()) };
+            return Err(ControlpathError::CreationError(
+                "RoCE route",
+                Error::from_kernel_errno(ret),
+            ));
+        }
+
+        let mut ah_attr: rdma_ah_attr = Default::default();
+        let ret = unsafe {
+            ib_init_ah_attr_from_path(
+                self.inner_device.raw_ptr().as_ptr(),
+                port_num as _,
+                &mut path as *mut _,
+                &mut ah_attr as *mut _,
+                gid_attr.as_ptr(),
+            )
+        };
+        unsafe { bd_rdma_put_gid_attr(gid_attr.as_ptr()) };
+        if ret != 0 {
+            return Err(ControlpathError::CreationError(
+                "RoCE address handle",
+                Error::from_kernel_errno(ret),
+            ));
+        }
+        Ok(ah_attr)
     }
 }
 
