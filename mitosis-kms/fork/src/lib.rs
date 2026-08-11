@@ -27,11 +27,11 @@ impl linux_kernel_module::KernelModule for Module {
     /// Called by the kernel upon the kernel module creation
     fn init() -> linux_kernel_module::KernelResult<Self> {
         let id = mac_id::read();
-        let gid_index = gid_index::read();
+        let selected_gid_index = gid_index::read();
         log::info!(
             "Remote fork kernel module assigned ID={}, GID index={}",
             id,
-            gid_index
+            selected_gid_index
         );
 
         // Currently, we use a default configuration of MITOSIS
@@ -41,7 +41,7 @@ impl linux_kernel_module::KernelModule for Module {
             .set_num_nics_used(1)
             .set_rpc_threads(2)
             .set_machine_id(id as usize)
-            .set_gid_index(gid_index as usize);
+            .set_gid_index(selected_gid_index as usize);
 
         #[cfg(feature = "legacy_dct")]
         config.set_init_dc_targets(12);
@@ -51,7 +51,7 @@ impl linux_kernel_module::KernelModule for Module {
         log::info!(
             "MITOSIS_EVENT version=1 event=module_init status=ok machine_id={} gid_index={} control={} data={}",
             id,
-            gid_index,
+            selected_gid_index,
             mitosis::CONTROL_TRANSPORT,
             mitosis::DATA_TRANSPORT
         );

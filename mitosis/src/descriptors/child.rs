@@ -86,6 +86,14 @@ impl ChildDescriptor {
     #[inline]
     pub fn apply_to(&mut self, file: *mut crate::bindings::file) {
         let mut task = Task::new();
+        // Replacing mm leaves the target thread's rseq TLS pointer stale.
+        let stale_rseq = unsafe { crate::bindings::pmem_get_current_rseq() };
+        unsafe { crate::bindings::pmem_reset_current_rseq() };
+        crate::log::info!(
+            "MITOSIS_EVENT version=1 event=fork_resume_compat status=rseq_reset stale_user_va=0x{:x}",
+            stale_rseq
+        );
+
         // 1. Unmap origin vma regions
         task.unmap_self();
 

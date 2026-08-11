@@ -85,6 +85,12 @@ unsigned int pmem_check_pte_present(pte_t *pte);
 struct pt_regs *
 pmem_get_current_pt_regs(void);
 
+unsigned long
+pmem_get_current_rseq(void);
+
+void
+pmem_reset_current_rseq(void);
+
 struct page *
 pmem_alloc_page(gfp_t gfp_mask);
 

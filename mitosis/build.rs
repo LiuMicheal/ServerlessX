@@ -67,6 +67,8 @@ const INCLUDED_KERNEL_FUNCS: &[&str] = &[
     "pmem_do_munmap",
     "vm_munmap",
     "pmem_get_current_pt_regs",
+    "pmem_get_current_rseq",
+    "pmem_reset_current_rseq",
     // fs, gs related
     "pmem_arch_get_my_fs",
     "pmem_arch_get_my_gs",
@@ -189,7 +191,10 @@ fn main() {
             "-mpreferred-stack-boundary=3",
             "-mskip-rax-setup",
             "-mindirect-branch-cs-prefix",
+            "-mindirect-branch=thunk-extern",
+            "-mindirect-branch-register",
             "-mfunction-return=thunk-extern",
+            "-fno-allow-store-data-races",
             "-fconserve-stack",
             "-mrecord-mcount",
         ]
