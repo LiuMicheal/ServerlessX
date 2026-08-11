@@ -1,21 +1,22 @@
 # SPD 5.14 P0-P2 progress
 
-Date: 2026-08-10
+Date: 2026-08-11
 
 This note records the public-safe boundary of the current ServerlessPD port.
 It does not make the Mitosis or PhOS lab profiles executable.
 
 ## Scope
 
-The immediate work is deliberately limited to:
+The initial P0-P2a work was deliberately limited to:
 
 1. freezing the existing GPU/RDMA/PhOS baseline;
 2. compiling the external Mitosis backend for the exact SPD guest kernel;
 3. running a single-Guest Mitosis runtime gate after the module build is
    accepted.
 
-Cross-guest remote fork, TinyLlama, scheduler work, DCT, and a KRCore rewrite
-remain outside this phase.
+At that checkpoint, cross-guest remote fork, TinyLlama, scheduler work, DCT,
+and a KRCore rewrite were outside the phase. P2b and P2c below extend only to
+the smallest dual-Guest CPU `ResumeRemote` gate.
 
 ## P0 evidence boundary
 
@@ -87,8 +88,9 @@ pre-existing `xpu-server`/`libpos.so` segmentation fault in the Guest dmesg is
 retained but is unrelated to this run. The warning means this is not a
 warning-free production-ready result.
 
-The result is limited to module/runtime initialization, device ABI access,
-prepare/registration, and cleanup. `ResumeLocal` remains unimplemented and no
+At that point, the result was limited to module/runtime initialization, device
+ABI access, prepare/registration, and cleanup. `ResumeLocal` remains
+unimplemented and no
 dual-Guest `ResumeRemote` test was attempted, so this is not evidence of a
 complete CPU fork. The next research gate is to resolve or characterize the
 return-thunk warning, then run the smallest appropriate remote-fork test.
@@ -112,7 +114,53 @@ GIDs into normal connection failures.
 Comparison against an independently exercised 112/113 KRCore/KRSN setup also
 confirmed the remaining narrow porting requirement: exact GID-attribute
 lifetime management, RoCE CM attributes, a fallback path when subnet-admin
-lookup is unavailable, and RoCE-aware RC/UD address-vector construction. No
-complete dual-Guest CPU fork or GPU remote fork is claimed yet. No module from
-the current work-in-progress source has been built or loaded, and Host/VM
-device configuration remains unchanged.
+lookup is unavailable, and RoCE-aware RC/UD address-vector construction.
+At this P2b checkpoint, no complete dual-Guest CPU fork or GPU remote fork was
+claimed. No module from that work-in-progress source had been built or loaded,
+and Host/VM device configuration remained unchanged.
+
+## P2c dual-Guest CPU ResumeRemote
+
+The minimal one-way CPU `ResumeRemote` gate now passes between the two SPD test
+Guests on the exact kernel
+`5.14.0-687.10.1.el9_8.0.1.x86_64`. The reviewed module completed the RoCEv2
+data and control connection, source prepare, target remote resume, and normal
+on-demand page fetching. The final candidate SHA-256 is
+`a041dd55858a217010729aecdcacd29b587f5c529c756bebafe18acc0f089c24`;
+modpost passed, dependencies are `ib_core,ib_cm`, and the module reports the
+exact target vermagic. BTF was skipped because the Guest does not expose
+`vmlinux`.
+
+The immediate post-resume SIGSEGV was not a missing saved-RIP page. Replacing
+the target address space left the target thread's kernel rseq registration
+pointing into its discarded TLS. The 5.14 notify-resume path touched that stale
+pointer before the first Mitosis page fault. The minimal compatibility fix
+uses the kernel's existing exec-style rseq reset before replacing the old
+address space. An A/B run then removed the temporary RIP bootstrap: the saved
+RIP and stack were fetched through the normal remote page-fault path, so no
+bootstrap remains in the final implementation.
+
+The final canary starts the source process with glibc rseq disabled from exec
+and leaves rseq enabled in the target launcher. The target observed and reset
+a nonzero old registration, returned to the restored source image, and stayed
+alive. At the first live observation, source and target were both in syscall
+230 (`clock_nanosleep`) with identical syscall arguments, stack pointer, and
+instruction pointer; both remained alive in the same syscall three seconds
+later. Cleanup left no test process. Host/VM/GPU/RNIC/VF/ACS/IOMMU and scheduler
+configuration were unchanged, and neither Host nor Guest was rebooted.
+
+This is intentionally a narrow result: one direction, one single-thread
+canary, and source rseq disabled for the whole process lifetime. It is not a
+general rseq migration solution, a bidirectional/stress/failure-recovery test,
+GPU remote fork, TinyLlama, or end-to-end ServerlessPD. `ResumeLocal` remains
+unimplemented. The existing 98 Gb/s DMA-BUF result is an independent GDR
+baseline and is not a CPU remote-fork performance result.
+
+One unload-lifecycle limitation also remains. A server-first module unload
+with live RC/CM sessions can race an asynchronous callback. Controlled tests
+therefore stop exact test processes, unload the client first, wait, and only
+then unload the server. The final reviewed-module reload used that order.
+
+External source patches, raw logs, VM inventory, internal addresses, binaries,
+and kernel modules remain in the private evidence store and are not published
+in this repository.
