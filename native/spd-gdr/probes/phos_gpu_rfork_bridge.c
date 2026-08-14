@@ -1,8 +1,10 @@
 #define _GNU_SOURCE
 #include "phos_gpu_rfork_bridge.h"
 
+#include <asm/prctl.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +19,10 @@
 #define PHOS_REPLAY_NONE UINT32_C(0)
 #define SPD_GPU_RFORK_CLONE_TICKET_CAPACITY 128U
 #define SPD_GPU_RFORK_ENV_VALUE_CAPACITY 256U
+#define SPD_BRIDGE_PROBE_CHILD_FD 199
+#define SPD_BRIDGE_PROBE_CANARY_RBP_OFFSET ((uintptr_t)56U)
+#define SPD_BRIDGE_PROBE_ENABLE_ENV "SPD_GPU_RFORK_BRIDGE_FRAME_PROBE"
+#define SPD_BRIDGE_PROBE_GATE_ENV "SPD_GPU_RFORK_BRIDGE_FRAME_GATE"
 
 #define SPD_TARGET_GDR_MODE_ENV \
     "SPD_GPU_RFORK_TARGET_POS_GDR_IMAGE_MODE"
@@ -56,6 +62,20 @@ struct SpdGpuRforkChildInput {
 
 static struct SpdGpuRforkChildInput child_input;
 static struct SpdGpuRforkBridgeResult child_result;
+
+struct SpdBridgeFrameProbeState {
+    unsigned long source_fs;
+    uint64_t source_guard;
+    uint64_t source_compiler_canary;
+    uint64_t source_manual_canary;
+    uintptr_t source_frame;
+    uintptr_t source_compiler_slot;
+    uintptr_t source_manual_slot;
+    char gate[PATH_MAX];
+    int enabled;
+};
+
+static struct SpdBridgeFrameProbeState bridge_probe;
 
 typedef int (*SpdCudaMemcpyFn)(void *, const void *, size_t, int);
 typedef int (*SpdCudaMemsetFn)(void *, int, size_t);
@@ -120,6 +140,73 @@ raw_write_literal(const char *text)
     size_t bytes = 0;
     while (text[bytes] != '\0') ++bytes;
     raw_write_all(STDOUT_FILENO, text, bytes);
+}
+
+static void
+raw_write_bool(int value)
+{
+    raw_write_literal(value ? "true" : "false");
+}
+
+static unsigned long
+read_fs_base(void)
+{
+    unsigned long value = 0;
+    long status = raw_syscall3(
+        SYS_arch_prctl, ARCH_GET_FS, (long)(uintptr_t)&value, 0);
+    return status == 0 ? value : 0;
+}
+
+static uint64_t
+read_tls_guard(void)
+{
+    uint64_t value;
+    __asm__ volatile("movq %%fs:0x28, %0" : "=r"(value));
+    return value;
+}
+
+static uint64_t
+read_bridge_compiler_canary(uintptr_t frame)
+{
+    const volatile uint64_t *slot = (const volatile uint64_t *)(
+        frame - SPD_BRIDGE_PROBE_CANARY_RBP_OFFSET);
+    return *slot;
+}
+
+static void
+emit_bridge_probe_event(
+    const char *role, enum spd_rfork_role outcome_role,
+    unsigned long observed_fs, uint64_t observed_guard,
+    uint64_t observed_compiler_canary, uint64_t observed_manual_canary,
+    uintptr_t observed_frame, uintptr_t observed_manual_slot)
+{
+    const uintptr_t observed_compiler_slot =
+        observed_frame - SPD_BRIDGE_PROBE_CANARY_RBP_OFFSET;
+    raw_write_literal(
+        "{\"schema\":\"serverlesspd.bridge-frame-probe.v1\","
+        "\"event\":\"bridge_frame_observed\",\"role\":\"");
+    raw_write_literal(role);
+    raw_write_literal("\",\"outcome_child\":");
+    raw_write_bool(outcome_role == SPD_RFORK_ROLE_REMOTE_CHILD);
+    raw_write_literal(",\"fs_match\":");
+    raw_write_bool(observed_fs == bridge_probe.source_fs);
+    raw_write_literal(",\"tls_guard_match\":");
+    raw_write_bool(observed_guard == bridge_probe.source_guard);
+    raw_write_literal(",\"compiler_canary_match\":");
+    raw_write_bool(
+        observed_compiler_canary == bridge_probe.source_compiler_canary);
+    raw_write_literal(",\"compiler_canary_vs_tls\":");
+    raw_write_bool(observed_compiler_canary == observed_guard);
+    raw_write_literal(",\"compiler_slot_match\":");
+    raw_write_bool(
+        observed_compiler_slot == bridge_probe.source_compiler_slot);
+    raw_write_literal(",\"manual_canary_match\":");
+    raw_write_bool(observed_manual_canary == bridge_probe.source_manual_canary);
+    raw_write_literal(",\"manual_canary_vs_tls\":");
+    raw_write_bool(observed_manual_canary == observed_guard);
+    raw_write_literal(",\"manual_slot_match\":");
+    raw_write_bool(observed_manual_slot == bridge_probe.source_manual_slot);
+    raw_write_literal("}\n");
 }
 
 __attribute__((noreturn)) static void
@@ -505,6 +592,11 @@ spd_gpu_rfork_prepare_attach(
     struct spd_rfork_context context;
     struct spd_rfork_outcome outcome;
     enum spd_rfork_status rfork_status;
+    volatile uint64_t manual_canary = 0;
+    uintptr_t frame;
+    const char *probe_enable;
+    const char *probe_gate;
+    int parent_probe_emitted = 0;
 
     clear_result(result);
     if (result == NULL || run_cookie == NULL ||
@@ -529,6 +621,46 @@ spd_gpu_rfork_prepare_attach(
         return result->status;
     }
 
+    probe_enable = getenv(SPD_BRIDGE_PROBE_ENABLE_ENV);
+    if (probe_enable != NULL && strcmp(probe_enable, "1") == 0) {
+        size_t gate_bytes;
+        memset(&bridge_probe, 0, sizeof(bridge_probe));
+        probe_gate = getenv(SPD_BRIDGE_PROBE_GATE_ENV);
+        if (probe_gate == NULL || probe_gate[0] != '/') {
+            return SPD_GPU_RFORK_BRIDGE_INVALID_ARGUMENT;
+        }
+        gate_bytes = strnlen(probe_gate, sizeof(bridge_probe.gate));
+        if (gate_bytes == sizeof(bridge_probe.gate)) {
+            return SPD_GPU_RFORK_BRIDGE_INVALID_ARGUMENT;
+        }
+        memcpy(bridge_probe.gate, probe_gate, gate_bytes + 1U);
+        (void)raw_syscall1(SYS_close, SPD_BRIDGE_PROBE_CHILD_FD);
+        frame = (uintptr_t)__builtin_frame_address(0);
+        bridge_probe.source_fs = read_fs_base();
+        bridge_probe.source_guard = read_tls_guard();
+        manual_canary = bridge_probe.source_guard;
+        bridge_probe.source_frame = frame;
+        bridge_probe.source_compiler_slot =
+            frame - SPD_BRIDGE_PROBE_CANARY_RBP_OFFSET;
+        bridge_probe.source_compiler_canary =
+            read_bridge_compiler_canary(frame);
+        bridge_probe.source_manual_slot = (uintptr_t)&manual_canary;
+        bridge_probe.source_manual_canary = manual_canary;
+        bridge_probe.enabled = 1;
+        if (bridge_probe.source_fs == 0 ||
+            bridge_probe.source_compiler_canary != bridge_probe.source_guard) {
+            raw_write_literal(
+                "{\"schema\":\"serverlesspd.bridge-frame-probe.v1\","
+                "\"event\":\"source_probe_invalid\",\"status\":\"fail\"}\n");
+            return SPD_GPU_RFORK_BRIDGE_RFORK_ERROR;
+        }
+        emit_bridge_probe_event(
+            "source_before", SPD_RFORK_ROLE_PARENT,
+            bridge_probe.source_fs, bridge_probe.source_guard,
+            bridge_probe.source_compiler_canary, manual_canary,
+            frame, (uintptr_t)&manual_canary);
+    }
+
     memset(&outcome, 0, sizeof(outcome));
     rfork_status = spd_rfork_prepare(
         &context, spd_rfork_default_io_ops(), &outcome);
@@ -536,6 +668,62 @@ spd_gpu_rfork_prepare_attach(
         result->status = SPD_GPU_RFORK_BRIDGE_RFORK_ERROR;
         result->native_status = rfork_status;
         return result->status;
+    }
+
+    if (bridge_probe.enabled) {
+        struct timespec interval = {0, 100000000L};
+        for (;;) {
+            long child_fd = raw_syscall3(
+                SYS_fcntl, SPD_BRIDGE_PROBE_CHILD_FD, F_GETFD, 0);
+            unsigned long observed_fs = read_fs_base();
+            uint64_t observed_guard = read_tls_guard();
+            uintptr_t observed_frame = (uintptr_t)__builtin_frame_address(0);
+            uint64_t observed_compiler_canary =
+                read_bridge_compiler_canary(observed_frame);
+            if (child_fd >= 0) {
+                int passed = observed_fs == bridge_probe.source_fs &&
+                    observed_guard == bridge_probe.source_guard &&
+                    observed_compiler_canary ==
+                        bridge_probe.source_compiler_canary &&
+                    observed_compiler_canary == observed_guard &&
+                    observed_frame == bridge_probe.source_frame &&
+                    manual_canary == bridge_probe.source_manual_canary &&
+                    manual_canary == observed_guard &&
+                    (uintptr_t)&manual_canary ==
+                        bridge_probe.source_manual_slot;
+                emit_bridge_probe_event(
+                    "remote_child", outcome.role, observed_fs,
+                    observed_guard, observed_compiler_canary,
+                    manual_canary, observed_frame,
+                    (uintptr_t)&manual_canary);
+                raw_write_literal(
+                    "{\"schema\":\"serverlesspd.bridge-frame-probe.v1\","
+                    "\"event\":\"bridge_probe_complete\","
+                    "\"role\":\"remote_child\",\"status\":\"");
+                raw_write_literal(passed ? "pass" : "fail");
+                raw_write_literal("\"}\n");
+                raw_exit_group(passed ? 0 : 42);
+            }
+            if (!parent_probe_emitted) {
+                emit_bridge_probe_event(
+                    "parent_held", outcome.role, observed_fs,
+                    observed_guard, observed_compiler_canary,
+                    manual_canary, observed_frame,
+                    (uintptr_t)&manual_canary);
+                raw_write_literal(
+                    "{\"schema\":\"serverlesspd.bridge-frame-probe.v1\","
+                    "\"event\":\"bridge_parent_frame_held\","
+                    "\"status\":\"pass\"}\n");
+                parent_probe_emitted = 1;
+            }
+            if (raw_syscall3(
+                    SYS_access, (long)(uintptr_t)bridge_probe.gate,
+                    F_OK, 0) == 0) {
+                break;
+            }
+            (void)raw_syscall3(
+                SYS_nanosleep, (long)(uintptr_t)&interval, 0, 0);
+        }
     }
 
     if (outcome.role == SPD_RFORK_ROLE_REMOTE_CHILD) {
