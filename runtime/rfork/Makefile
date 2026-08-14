@@ -5,6 +5,7 @@ AR ?= ar
 CPPFLAGS += -Iinclude
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -Wall -Wextra -Werror
+RFORK_OBJECT_CFLAGS ?=
 
 LIBRARY := $(BUILD_DIR)/libserverlessx_rfork.a
 OBJECT := $(BUILD_DIR)/rfork_runtime.o
@@ -21,7 +22,7 @@ $(BUILD_DIR):
 	mkdir -p $@
 
 $(OBJECT): src/rfork_runtime.c include/serverlessx/rfork_runtime.h | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(RFORK_OBJECT_CFLAGS) -c $< -o $@
 
 $(LIBRARY): $(OBJECT)
 	$(AR) rcs $@ $^
