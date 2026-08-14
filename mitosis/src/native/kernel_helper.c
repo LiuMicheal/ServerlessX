@@ -495,11 +495,10 @@ void pmem_put_page(struct page *page)
   return put_page(page);
 }
 
-void pmem_clear_pte_write(pte_t *pte)
+void pmem_clear_pte_write(struct mm_struct *mm, unsigned long address,
+                          pte_t *pte)
 {
-  pte_t temp_pte;
-  temp_pte = pte_clear_flags(*pte, _PAGE_RW);
-  set_pte(pte, temp_pte);
+  ptep_set_wrprotect(mm, address, pte);
 }
 
 void pmem_set_pte_write(pte_t *pte)

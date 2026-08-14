@@ -224,7 +224,8 @@ void pmem_page_dup_rmap(struct page *page, bool compound);
 
 void pmem_page_free_rmap(struct page *page, bool compound);
 
-void pmem_clear_pte_write(pte_t *pte);
+void pmem_clear_pte_write(struct mm_struct *mm, unsigned long address,
+                          pte_t *pte);
 void pmem_set_pte_write(pte_t *pte);
 unsigned int pmem_check_pte_write(pte_t *pte);
 

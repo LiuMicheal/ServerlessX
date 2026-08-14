@@ -169,7 +169,7 @@ impl VMACOWPTGenerator<'_, '_> {
             if unlikely(my.vma.has_write_permission()) {
                 my.inner
                     .add_page(COW4KPage::new(pmem_pte_to_page(pte)).unwrap());
-                pmem_clear_pte_write(pte);
+                pmem_clear_pte_write((*walk).mm, addr, pte);
             }
             if likely(pmem_check_pte_write(pte) == 0) {
                 // Read only page
