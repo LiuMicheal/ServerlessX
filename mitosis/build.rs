@@ -55,6 +55,8 @@ const INCLUDED_KERNEL_FUNCS: &[&str] = &[
     "pmem_vm_fault_get_vma",
     "pmem_vm_fault_get_address",
     "pmem_vm_fault_set_page",
+    "pmem_copy_from_user_u64",
+    "pmem_page_read_u64",
     "pmem_vma_get_start",
     "pmem_vma_get_end",
     "pmem_vma_get_flags",
