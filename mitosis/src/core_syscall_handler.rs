@@ -701,6 +701,8 @@ impl MitosisSysCallHandler {
         self.incr_fault_page_cnt();
 
         let resume_related = self.caller_status.resume_related.as_mut().unwrap();
+        let saved_sp = resume_related.descriptor.regs.others.sp;
+        let is_saved_stack_page = (fault_addr & !4095) == (saved_sp & !4095);
         // #[cfg(feature = "page-cache")]
         // let resume_related = self.caller_status.resume_related.as_ref().unwrap();
 
@@ -762,6 +764,19 @@ impl MitosisSysCallHandler {
         };
         match new_page {
             Some(new_page_p) => {
+                if is_saved_stack_page {
+                    let stack_word = crate::bindings::pmem_page_read_u64(
+                        new_page_p as *mut _,
+                        saved_sp & 4095,
+                    );
+                    crate::log::info!(
+                        "MITOSIS_DIAG event=resume_stack_fault fault_addr=0x{:x} saved_sp=0x{:x} lookup_hit={} remote_read=ok stack_word=0x{:x}",
+                        fault_addr,
+                        saved_sp,
+                        phy_addr.is_some(),
+                        stack_word
+                    );
+                }
                 crate::bindings::pmem_vm_fault_set_page(vmf, new_page_p as *mut _);
                 // update cache
                 #[cfg(feature = "page-cache")]
@@ -792,6 +807,15 @@ impl MitosisSysCallHandler {
                     if vd.is_anonymous && (vma.get_start() == vd.get_start()) {
                         let new_page_p =
                             crate::bindings::pmem_alloc_page(crate::bindings::PMEM_GFP_HIGHUSER);
+
+                        if is_saved_stack_page {
+                            crate::log::info!(
+                                "MITOSIS_DIAG event=resume_stack_fault fault_addr=0x{:x} saved_sp=0x{:x} lookup_hit={} remote_read=failed fallback=anonymous_uninitialized",
+                                fault_addr,
+                                saved_sp,
+                                phy_addr.is_some()
+                            );
+                        }
 
                         crate::bindings::pmem_vm_fault_set_page(vmf, new_page_p as *mut _);
                         return 0;

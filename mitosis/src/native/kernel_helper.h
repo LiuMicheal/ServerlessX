@@ -117,6 +117,12 @@ pmem_vm_fault_get_address(struct vm_fault *vmf);
 void
 pmem_vm_fault_set_page(struct vm_fault *vmf, struct page *page);
 
+int
+pmem_copy_from_user_u64(unsigned long addr, u64 *value);
+
+u64
+pmem_page_read_u64(struct page *page, unsigned long offset);
+
 unsigned long
 pmem_vma_get_start(const struct vm_area_struct *vma);
 

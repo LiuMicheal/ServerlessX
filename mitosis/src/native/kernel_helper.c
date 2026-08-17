@@ -4,6 +4,8 @@
 #include <linux/rmap.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
+#include <linux/highmem.h>
+#include <linux/uaccess.h>
 
 #include <linux/ptrace.h>
 #include <linux/cpumask.h>
@@ -387,6 +389,29 @@ void
 pmem_vm_fault_set_page(struct vm_fault *vmf, struct page *page)
 {
   vmf->page = page;
+}
+
+int
+pmem_copy_from_user_u64(unsigned long addr, u64 *value)
+{
+  return copy_from_user(value, (const void __user *)addr, sizeof(*value))
+             ? -EFAULT
+             : 0;
+}
+
+u64
+pmem_page_read_u64(struct page *page, unsigned long offset)
+{
+  void *base;
+  u64 value = 0;
+
+  if (offset > PAGE_SIZE - sizeof(value))
+    return 0;
+
+  base = kmap_local_page(page);
+  memcpy(&value, (char *)base + offset, sizeof(value));
+  kunmap_local(base);
+  return value;
 }
 
 unsigned long

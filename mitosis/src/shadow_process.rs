@@ -56,13 +56,46 @@ impl ShadowProcess {
         // clear the TLB
         mm.flush_tlb_mm();
 
+        let regs = task.generate_reg_descriptor();
+        let saved_sp = regs.others.sp;
+        let saved_ip = regs.others.ip;
+        let stack_page = saved_sp & !4095;
+        let ip_page = saved_ip & !4095;
+        let lookup = |addr: u64| {
+            vma_descriptors
+                .iter()
+                .enumerate()
+                .find(|(_, vma)| addr >= vma.get_start() && addr < vma.get_end())
+                .and_then(|(idx, vma)| {
+                    vma_page_table[idx]
+                        .lookup_offset((addr - vma.get_start()) as u32)
+                })
+        };
+        let stack_pa = lookup(stack_page);
+        let ip_pa = lookup(ip_page);
+        let mut stack_word = 0u64;
+        let stack_read_rc = unsafe {
+            crate::bindings::pmem_copy_from_user_u64(saved_sp, &mut stack_word as *mut _)
+        };
+        crate::log::info!(
+            "MITOSIS_DIAG event=prepare_resume_pages saved_ip=0x{:x} saved_sp=0x{:x} ip_hit={} ip_pa=0x{:x} stack_hit={} stack_pa=0x{:x} stack_read_rc={} stack_word=0x{:x}",
+            saved_ip,
+            saved_sp,
+            ip_pa.is_some(),
+            ip_pa.unwrap_or(0),
+            stack_pa.is_some(),
+            stack_pa.unwrap_or(0),
+            stack_read_rc,
+            stack_word
+        );
+
         Self {
             shadow_vmas,
             cow_shadow_pagetable: Some(shadow_pt),
             copy_shadow_pagetable: None,
             descriptor: ParentDescriptor {
                 machine_info: rdma_descriptor,
-                regs: task.generate_reg_descriptor(),
+                regs,
                 page_table: vma_page_table,
                 vma: vma_descriptors,
             },

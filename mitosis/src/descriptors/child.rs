@@ -86,6 +86,21 @@ impl ChildDescriptor {
     #[inline]
     pub fn apply_to(&mut self, file: *mut crate::bindings::file) {
         let mut task = Task::new();
+        let saved_ip = self.regs.others.ip;
+        let saved_sp = self.regs.others.sp;
+        let ip_pa = self.lookup_pg_table(saved_ip);
+        let stack_pa = self.lookup_pg_table(saved_sp);
+        crate::log::info!(
+            "MITOSIS_DIAG event=descriptor_resume_pages saved_ip=0x{:x} saved_sp=0x{:x} ip_hit={} ip_pa=0x{:x} stack_hit={} stack_pa=0x{:x} page_count={} vma_count={}",
+            saved_ip,
+            saved_sp,
+            ip_pa.is_some(),
+            ip_pa.unwrap_or(0),
+            stack_pa.is_some(),
+            stack_pa.unwrap_or(0),
+            self.page_table.len(),
+            self.vma.len()
+        );
         // Replacing mm leaves the target thread's rseq TLS pointer stale.
         let stale_rseq = unsafe { crate::bindings::pmem_get_current_rseq() };
         unsafe { crate::bindings::pmem_reset_current_rseq() };

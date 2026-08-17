@@ -301,4 +301,12 @@ impl CompactPageTable {
     pub fn table_len(&self) -> usize {
         self.inner_pg_table.len()
     }
+
+    #[inline(always)]
+    pub(crate) fn lookup_offset(&self, offset: Offset) -> Option<Value> {
+        self.inner_pg_table
+            .iter()
+            .find(|(entry_offset, _)| *entry_offset == offset)
+            .map(|(_, value)| *value)
+    }
 }
