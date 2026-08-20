@@ -50,9 +50,9 @@ slsm_cn  56fd85a72f34741458e7ad67fff0cead1067e26b19239b1bd81bcb3a8f66cf07
 slsm_sn  d13e6f08eb2af89fc2db832e41652a4999c1cc0ed0825724b66253bef6c158f7
 ```
 
-The original artifact remains the only runtime-validated result; the hardened
-tree is compile-verified but must not be described as runtime-tested until the
-correctness matrix is rerun.
+The original module remains the only runtime-validated kernel artifact; the
+hardened tree is compile-verified but must not be described as runtime-tested
+until the correctness matrix is rerun.
 
 ## Validation matrix
 
@@ -64,6 +64,28 @@ correctness matrix is rerun.
 The prototype times include serialized RDMA READ, completion polling, checksum,
 and copy-to-user. The runs were not repeated or tuned; these values must not be
 presented as latency or throughput measurements or compared with paper baselines.
+
+## Minimal lifecycle follow-up
+
+The external userspace control protocol was then extended with a small,
+explicit lifecycle:
+
+```text
+PUBLISH -> FETCH -> COMMIT -> REVOKE
+```
+
+Using the original module still loaded in both Guests, the lifecycle clients
+passed checksum validation and completed all four phases for both payload sizes:
+
+| Direction | Payload | Chunks | FNV-1a checksum | SN fetch time | Result |
+| --- | ---: | ---: | --- | ---: | --- |
+| mem01 CN -> mem02 SN | 1 MiB | 1 | `0xb6eae9c0f46aa325` | 5,770 us | pass |
+| mem02 CN -> mem01 SN | 8 MiB | 8 | `0x9ccbaf967e662325` | 32,947 us | pass |
+
+The 8 MiB reverse-direction run was used because the inherited CM/RC service
+returned `ECONNREFUSED` for a second session in the original direction after
+teardown. No module was unloaded and no Guest was rebooted to reset that state.
+This is a lifecycle correctness check, not a directional performance result.
 
 The original module loads emitted inherited return-thunk and unsafe-global-rkey
 warnings. No Oops, BUG, panic, or test failure followed during this gate. The
@@ -83,9 +105,10 @@ CN userspace buffer
 ```
 
 It does not include Nova-LSM, a real on-disk SST format, storage I/O, flush,
-compaction, RDMA mmap page faults, epochs, range locks, Manifest publication,
-persistence, recovery, function lifecycle, multi-tenancy, elasticity, or a
-scheduler.
+compaction, RDMA mmap page faults, persistent epochs, range locks, Manifest
+publication, persistence, recovery, function lifecycle, multi-tenancy,
+elasticity, or a scheduler. COMMIT and REVOKE are protocol acknowledgements;
+they do not make bytes durable or implement an LSM Manifest.
 
 Raw logs, internal addresses, credentials, VM definitions, modules, and
 executables remain outside this repository. No host or Guest reboot is part of
@@ -94,6 +117,6 @@ the recorded gate.
 ## Next gate
 
 Load the compile-verified hardened source in the isolated test Guests and rerun
-this correctness matrix. Only after that result is recorded should a minimal
-SST/epoch lifecycle be added; Nova-LSM integration and performance work remain
-later stages.
+the transport and lifecycle matrices in a controlled module-lifecycle window.
+Only after that result is recorded should SST/epoch metadata or Nova-LSM
+integration be attempted; performance work remains a later stage.
