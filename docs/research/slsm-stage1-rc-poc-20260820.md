@@ -87,6 +87,47 @@ returned `ECONNREFUSED` for a second session in the original direction after
 teardown. No module was unloaded and no Guest was rebooted to reset that state.
 This is a lifecycle correctness check, not a directional performance result.
 
+## Minimal SST/epoch/Manifest follow-up
+
+The external userspace prototype then added lifecycle protocol version 2
+metadata without changing the kernel descriptor ABI:
+
+```text
+SST metadata = { level, epoch, inclusive min_key, inclusive max_key }
+SN Manifest  = { pending | committed entries, version }
+```
+
+On a healthy session, `PUBLISH` creates a pending Manifest entry, `COMMIT`
+makes it visible to an epoch/key-range metadata lookup, and `REVOKE` removes it
+or permits lookup to fall back to another committed entry. The Manifest is
+process-local, bounded, and user-space only.
+
+The standalone two-SST test passed pending invisibility, epoch/state checks,
+same-epoch L0 priority, and fallback after revoke:
+
+```text
+{"event":"manifest_test","status":"pass","entries":2,
+ "lookup_key":75,"final_count":0,"version":6}
+```
+
+A pre-v2 live 1 MiB metadata smoke also passed with `sst_id=4001`, `level=0`,
+`epoch=7`, key range `[4001000,4001999]`, and final Manifest version `3` on
+both roles. The final v2 userspace binaries compile-verified and were copied to
+both Guests. A reverse-direction 8 MiB session then passed with `sst_id=4008`,
+`level=0`, `epoch=8`, key range `[4008000,4008999]`, Manifest version `3`, and
+SN fetch time `33,116 us`. The direction was reversed because the inherited
+CM/RC service does not reliably accept a second session after teardown. The
+lookup is metadata routing only: the payload remains a deterministic byte
+pattern, not a parsed SST key/value table.
+
+Final userspace artifact hashes:
+
+```text
+slsm_cn             f8868cf985496d52975a3b0826728c37ffa40fab16b77805179dd976550acadb
+slsm_sn             9fb2246d2ec32c59001399b3ffd5f400268efd3f5edfd86c6550d39a39b18996
+slsm_manifest_test  3cd0b35afcf6bc93e7b9e9b534f42e3ba7cf7cd96fae3bc9bd3d54a257d6da50
+```
+
 The original module loads emitted inherited return-thunk and unsafe-global-rkey
 warnings. No Oops, BUG, panic, or test failure followed during this gate. The
 physical-address descriptors and global-rkey path still restrict the prototype
@@ -104,11 +145,11 @@ CN userspace buffer
   -> checksum agreement
 ```
 
-It does not include Nova-LSM, a real on-disk SST format, storage I/O, flush,
-compaction, RDMA mmap page faults, persistent epochs, range locks, Manifest
-publication, persistence, recovery, function lifecycle, multi-tenancy,
-elasticity, or a scheduler. COMMIT and REVOKE are protocol acknowledgements;
-they do not make bytes durable or implement an LSM Manifest.
+It does not include Nova-LSM, a real SST key/value format, storage I/O, flush,
+compaction, RDMA mmap page faults, persistent epochs, range locks, durable
+Manifest publication, persistence, recovery, function lifecycle,
+multi-tenancy, elasticity, or a scheduler. The user-space Manifest is metadata
+routing only and does not provide a complete LSM read path.
 
 Raw logs, internal addresses, credentials, VM definitions, modules, and
 executables remain outside this repository. No host or Guest reboot is part of
@@ -118,5 +159,6 @@ the recorded gate.
 
 Load the compile-verified hardened source in the isolated test Guests and rerun
 the transport and lifecycle matrices in a controlled module-lifecycle window.
-Only after that result is recorded should SST/epoch metadata or Nova-LSM
-integration be attempted; performance work remains a later stage.
+The next functional step is a small real SST format with one MemTable
+flush/read path; that is the appropriate point for a Nova-LSM-style user-space
+integration. Performance work remains a later stage.

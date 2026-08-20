@@ -13,6 +13,11 @@ prototype; its sanitized evidence note is [SLSM Stage 1 RC SST
 Fetch](../../docs/research/slsm-stage1-rc-poc-20260820.md). That note does not
 make the prototype executable through ServerlessX.
 
+The external follow-up adds only user-space `level`/`epoch`/key-range metadata
+and a bounded pending/committed Manifest. It remains metadata-routing evidence:
+the payload is a deterministic byte pattern, the Manifest is process-local, and
+no real SST reader or LSM workload is bundled.
+
 The original prototype passed a two-Guest RC SST-fetch correctness gate for
 1 MiB and 8 MiB SST-shaped in-memory payloads. The post-run hardened source has
 now been compile-verified against the exact Guest kernel, but it was not loaded
