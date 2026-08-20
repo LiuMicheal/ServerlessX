@@ -1,5 +1,6 @@
 #include "slsm_common.h"
 #include "slsm_manifest.h"
+#include "slsm_sst.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -69,9 +70,11 @@ int main(int argc, char **argv)
     struct slsm_connect_req connect_request = {0};
     struct slsm_fetch_req fetch_request = {0};
     struct slsm_manifest manifest;
+    struct slsm_sst_header sst_header = {0};
     const struct slsm_manifest_entry *lookup_entry;
     int manifest_status;
     uint64_t userspace_checksum = 0;
+    uint64_t lookup_value = 0;
     void *buffer = NULL;
     int control_fd = -1;
     int device_fd = -1;
@@ -167,8 +170,14 @@ int main(int argc, char **argv)
     if (fetch_request.fetched_length != message.descriptor.total_length ||
         fetch_request.checksum != message.descriptor.checksum ||
         userspace_checksum != message.descriptor.checksum ||
-        slsm_check_sst(buffer, (size_t)fetch_request.fetched_length,
-                       message.descriptor.sst_id) != 0) {
+        slsm_sst_validate(buffer, (size_t)fetch_request.fetched_length,
+                          message.descriptor.sst_id, message.metadata.epoch,
+                          &sst_header) != 0 ||
+        sst_header.min_key != message.metadata.min_key ||
+        sst_header.max_key != message.metadata.max_key ||
+        slsm_sst_lookup(buffer, (size_t)fetch_request.fetched_length,
+                         message.metadata.min_key, &lookup_value) != 0 ||
+        lookup_value != message.metadata.min_key + UINT64_C(7)) {
         fprintf(stderr, "SST validation failed after RDMA READ\n");
         ack.phase = SLSM_PHASE_FETCH;
         ack.generation = message.generation;
@@ -295,14 +304,16 @@ send_ack:
     }
 print_result:
     if (result == EXIT_SUCCESS) {
-        printf("{\"event\":\"stage3_result\",\"role\":\"sn\",\"status\":\"pass\","
+        printf("{\"event\":\"stage4_result\",\"role\":\"sn\",\"status\":\"pass\","
                "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
                ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
                "\"checksum\":\"0x%016" PRIx64 "\",\"elapsed_us\":%" PRIu64
-               ",\"manifest_version\":%" PRIu64 "}\n",
+               ",\"records\":%u,\"lookup_key\":%" PRIu64
+               ",\"lookup_value\":%" PRIu64 ",\"manifest_version\":%" PRIu64 "}\n",
                message.generation,
                message.descriptor.sst_id, fetch_request.fetched_length,
                message.descriptor.chunk_count, userspace_checksum, fetch_request.elapsed_us,
+               sst_header.record_count, message.metadata.min_key, lookup_value,
                manifest.version);
     }
 out:

@@ -1,4 +1,5 @@
 #include "slsm_common.h"
+#include "slsm_sst.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -20,7 +21,7 @@ static void usage(const char *program)
 {
     fprintf(stderr,
             "Usage: %s [--device PATH] [--bind IPv4] [--port PORT] "
-            "[--size BYTES] [--sst-id ID] [--epoch E] [--level L]\n",
+            "[--records COUNT] [--sst-id ID] [--epoch E] [--level L]\n",
             program);
 }
 
@@ -56,7 +57,7 @@ int main(int argc, char **argv)
         {"device", required_argument, NULL, 'd'},
         {"bind", required_argument, NULL, 'b'},
         {"port", required_argument, NULL, 'p'},
-        {"size", required_argument, NULL, 's'},
+        {"records", required_argument, NULL, 'r'},
         {"sst-id", required_argument, NULL, 'i'},
         {"epoch", required_argument, NULL, 'e'},
         {"level", required_argument, NULL, 'l'},
@@ -66,17 +67,22 @@ int main(int argc, char **argv)
     const char *device = DEFAULT_DEVICE;
     const char *bind_address = NULL;
     uint16_t port = SLSM_CONTROL_PORT;
-    uint64_t size = SLSM_MAX_SST_SIZE;
+    uint64_t records = 8;
     uint64_t sst_id = 1;
     uint64_t epoch = 1;
     uint64_t level = 0;
     struct slsm_register_req request = {0};
+    struct slsm_memtable memtable;
+    struct slsm_sst_metadata metadata;
     struct slsm_lifecycle_message message = {0};
     struct slsm_lifecycle_ack ack = {0};
     struct pollfd poll_fd;
     uint64_t userspace_checksum;
     uint64_t fetch_elapsed_us = 0;
     uint64_t commit_manifest_version = 0;
+    size_t encoded_length = 0;
+    size_t record_index;
+    uint64_t key_base;
     void *buffer = NULL;
     int device_fd = -1;
     int listener_fd = -1;
@@ -84,7 +90,7 @@ int main(int argc, char **argv)
     int result = EXIT_FAILURE;
     int option;
 
-    while ((option = getopt_long(argc, argv, "d:b:p:s:i:e:l:h", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "d:b:p:r:i:e:l:h", options, NULL)) != -1) {
         switch (option) {
         case 'd': device = optarg; break;
         case 'b': bind_address = optarg; break;
@@ -94,8 +100,9 @@ int main(int argc, char **argv)
                 return EXIT_FAILURE;
             }
             break;
-        case 's':
-            if (slsm_parse_u64(optarg, &size) != 0 || size == 0 || size > SLSM_MAX_SST_SIZE) {
+        case 'r':
+            if (slsm_parse_u64(optarg, &records) != 0 || records == 0 ||
+                records > SLSM_SST_MAX_RECORDS) {
                 usage(argv[0]);
                 return EXIT_FAILURE;
             }
@@ -129,17 +136,31 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    if (posix_memalign(&buffer, 4096, (size_t)size) != 0) {
-        fprintf(stderr, "failed to allocate SST buffer\n");
-        goto out;
-    }
-    slsm_fill_sst(buffer, (size_t)size, sst_id);
-    userspace_checksum = slsm_fnv1a(buffer, (size_t)size);
-
-    if (sst_id > (UINT64_MAX - UINT64_C(999)) / UINT64_C(1000)) {
+    if (sst_id > (UINT64_MAX - UINT64_C(7) - (records - 1)) / UINT64_C(1000)) {
         fprintf(stderr, "sst-id is too large for the default key range\n");
         goto out;
     }
+    key_base = sst_id * UINT64_C(1000);
+    slsm_memtable_init(&memtable);
+    for (record_index = 0; record_index < records; ++record_index) {
+        uint64_t key = key_base + record_index;
+
+        if (slsm_memtable_put(&memtable, key, key + UINT64_C(7)) != 0) {
+            fprintf(stderr, "failed to populate MemTable\n");
+            goto out;
+        }
+    }
+    if (posix_memalign(&buffer, 4096, SLSM_SST_MAX_SIZE) != 0) {
+        fprintf(stderr, "failed to allocate SST buffer\n");
+        goto out;
+    }
+    if (slsm_sst_flush(&memtable, sst_id, epoch, buffer, SLSM_SST_MAX_SIZE,
+                       &encoded_length, &metadata) != 0) {
+        fprintf(stderr, "failed to flush MemTable to SST\n");
+        goto out;
+    }
+    metadata.level = (uint16_t)level;
+    userspace_checksum = slsm_fnv1a(buffer, encoded_length);
 
     device_fd = open(device, O_RDWR | O_CLOEXEC);
     if (device_fd < 0) {
@@ -147,7 +168,7 @@ int main(int argc, char **argv)
         goto out;
     }
     request.user_addr = (uintptr_t)buffer;
-    request.length = size;
+    request.length = encoded_length;
     request.sst_id = sst_id;
     if (ioctl(device_fd, SLSM_IOCTL_REGISTER_REGION, &request) != 0) {
         perror("SLSM_IOCTL_REGISTER_REGION");
@@ -166,7 +187,7 @@ int main(int argc, char **argv)
     printf("{\"event\":\"cn_ready\",\"status\":\"ok\",\"sst_id\":%" PRIu64
            ",\"bytes\":%" PRIu64 ",\"chunks\":%u,\"checksum\":\"0x%016" PRIx64
            "\",\"bind\":\"%s\",\"port\":%u}\n",
-           sst_id, size, request.descriptor.chunk_count, request.descriptor.checksum,
+           sst_id, encoded_length, request.descriptor.chunk_count, request.descriptor.checksum,
            bind_address, port);
     fflush(stdout);
 
@@ -188,13 +209,7 @@ int main(int argc, char **argv)
     message.phase = SLSM_PHASE_PUBLISH;
     message.generation = 1;
     message.descriptor = request.descriptor;
-    message.metadata = (struct slsm_sst_metadata){
-        .version = SLSM_METADATA_VERSION,
-        .level = (uint16_t)level,
-        .epoch = epoch,
-        .min_key = sst_id * UINT64_C(1000),
-        .max_key = sst_id * UINT64_C(1000) + UINT64_C(999),
-    };
+    message.metadata = metadata;
     if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
         slsm_read_full(client_fd, &ack, sizeof(ack)) != 0) {
         perror("publish exchange");
@@ -203,7 +218,7 @@ int main(int argc, char **argv)
     if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
         ack.phase != SLSM_PHASE_FETCH || ack.generation != message.generation ||
         ack.status != 0 ||
-        ack.fetched_length != size || ack.checksum != userspace_checksum) {
+        ack.fetched_length != encoded_length || ack.checksum != userspace_checksum) {
         fprintf(stderr,
                 "SN rejected FETCH: status=%d bytes=%" PRIu64 " checksum=0x%016" PRIx64 "\n",
                 ack.status, ack.fetched_length, ack.checksum);
@@ -243,17 +258,17 @@ int main(int argc, char **argv)
         goto unregister;
     }
 
-    printf("{\"event\":\"stage3_result\",\"role\":\"cn\",\"status\":\"pass\","
+    printf("{\"event\":\"stage4_result\",\"role\":\"cn\",\"status\":\"pass\","
            "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
            ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
            "\"checksum\":\"0x%016" PRIx64 "\",\"sn_elapsed_us\":%" PRIu64
            ",\"level\":%u,\"epoch\":%" PRIu64
            ",\"key_range\":[%" PRIu64 ",%" PRIu64 "]"
-           ",\"manifest_version\":%" PRIu64 "}\n",
-           message.generation, sst_id, size, request.descriptor.chunk_count,
+           ",\"records\":%u,\"manifest_version\":%" PRIu64 "}\n",
+           message.generation, sst_id, encoded_length, request.descriptor.chunk_count,
            userspace_checksum, fetch_elapsed_us, message.metadata.level,
            message.metadata.epoch, message.metadata.min_key, message.metadata.max_key,
-           ack.manifest_version);
+           (unsigned)memtable.count, ack.manifest_version);
     result = EXIT_SUCCESS;
 
 unregister:

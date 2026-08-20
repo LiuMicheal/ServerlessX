@@ -1,17 +1,20 @@
 # SLSM Stage 1 RC SST Fetch
 
 This directory contains the first mechanism-only ServerlessLSM prototype. It
-establishes a narrow contract: a compute node (CN) can publish an in-memory
-SST descriptor and a storage node (SN) can fetch the SST through one-sided RC
-RDMA READs, then expose the fetched SST through a small user-space Manifest.
+establishes a narrow contract: a compute node (CN) can flush a small in-memory
+MemTable into an SST, publish its descriptor, and a storage node (SN) can fetch
+the SST through one-sided RC RDMA READs, validate it, and perform a point lookup
+before exposing it through a small user-space Manifest.
 
-It is not Nova-LSM integration and it does not implement flush, compaction,
-`mmap`, range locks, persistence, recovery, function lifecycle management, or
-scheduling. The Manifest is in-memory and user-space only.
+It is not Nova-LSM integration and it does not implement storage I/O,
+compaction, `mmap`, range locks, persistence, recovery, function lifecycle
+management, or scheduling. The SST and Manifest are in-memory and user-space
+only.
 
 ## Data path
 
-1. `slsm_cn` fills a deterministic SST-shaped byte buffer and registers it
+1. `slsm_cn` inserts a small deterministic set of key/value pairs into a
+   MemTable, flushes it into an SST, and registers the exact encoded bytes
    through `/dev/slsm`.
 2. `slsm.ko` copies the buffer into up to eight 1 MiB kernel memory regions and
    returns a versioned descriptor containing the owner GID, remote addresses,
@@ -36,8 +39,10 @@ slsm-kms/
   slsm/src/lib.rs                /dev/slsm and the five ioctl operations
 slsm-user/
   include/slsm_uapi.h            shared ABI and descriptor definitions
-  slsm_cn.c                      region owner and control listener
-  slsm_sn.c                      RC client, RDMA reader, and validator
+  slsm_cn.c                      MemTable flush, region owner, and listener
+  slsm_sn.c                      RC client, RDMA reader, SST validator, and lookup
+  slsm_sst.[ch]                  bounded SST and MemTable implementation
+  slsm_sst_test.c                 offline SST flush/validate/lookup test
   slsm_manifest.[ch]             minimal in-memory SST Manifest
   slsm_manifest_test.c            offline Manifest/lookup test
 ```
@@ -94,7 +99,8 @@ the userspace gate can be run with documentation-only addresses as follows:
 # CN Guest
 ./slsm-user/bin/slsm_cn \
   --bind 192.0.2.10 \
-  --size 1048576 \
+  --records 8 \
+  --epoch 1 \
   --sst-id 1001
 
 # SN Guest
@@ -102,12 +108,12 @@ the userspace gate can be run with documentation-only addresses as follows:
 ```
 
 Replace the example address with the CN address reachable from the SN. The CN
-requires `--bind`, and the SN requires `--server`. Because `/dev/slsm` exposes
-an unsafe global-rkey research path, both programs require `CAP_SYS_RAWIO`
-(normally root). Success requires a `stage3_result` JSON line with `status` set
-to `pass` from both roles. The result includes the Manifest version and the
-metadata used for the lookup check. `make -C slsm-user test` also runs the
-two-SST offline Manifest test.
+requires `--bind`, and the SN requires `--server`; `--records` accepts 1-32.
+Because `/dev/slsm` exposes an unsafe global-rkey research path, both programs
+require `CAP_SYS_RAWIO` (normally root). Success requires a `stage4_result`
+JSON line with `status` set to `pass` from both roles. The result includes the
+SST record count, point-lookup result, Manifest version, and metadata. `make -C
+slsm-user test` runs both the Manifest and SST offline tests.
 
 ## Safety and limitations
 

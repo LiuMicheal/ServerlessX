@@ -167,6 +167,46 @@ slsm_sn             9fb2246d2ec32c59001399b3ffd5f400268efd3f5edfd86c6550d39a39b1
 slsm_manifest_test  3cd0b35afcf6bc93e7b9e9b534f42e3ba7cf7cd96fae3bc9bd3d54a257d6da50
 ```
 
+## Stage 4: real SST and MemTable flush/read
+
+The next small-paper gate replaced the deterministic byte pattern with a small
+real, in-memory SST format while keeping the kernel descriptor and RDMA ABI
+unchanged. The format has a fixed header, sorted `uint64_t` key/value records,
+and a 32-record bound. CN inserts records into a sorted MemTable and flushes it
+to an SST before registering the exact encoded length. SN validates the header,
+SST ID, epoch, key range, record ordering, and then performs one binary-search
+point lookup after the RDMA READ. The Manifest lifecycle remains
+`PUBLISH -> FETCH -> COMMIT -> REVOKE`.
+
+The standalone tests passed:
+
+```text
+{"event":"manifest_test","status":"pass","entries":2,
+ "lookup_key":75,"final_count":0,"version":6}
+{"event":"sst_test","status":"pass","records":3,"bytes":104,
+ "lookup_key":20,"lookup_value":222}
+```
+
+Two single-session Guest checks passed with the original loaded module. In the
+first, mem02 acted as CN and mem01 as SN: eight records (184 bytes) were read,
+the checksum was `0xb0127df7a653a348`, and the SN reported `9 us`. In the
+second, mem01 acted as CN and mem02 as SN: five records (136 bytes) were read,
+the checksum was `0xe1782d3411145d10`, and the SN reported `8 us`. Both roles
+reported `stage4_result=pass`, and the point lookups returned the expected
+`key + 7` values. These one-shot times are correctness-run observations, not
+performance measurements.
+
+The current userspace artifact hashes are:
+
+```text
+slsm_cn             967b60e11510ef3d192f477169d8cb0071122f4db626aa112f094ff64dbfe6c8
+slsm_sn             fef6774d7a572e2e97cbb66922c52f06a9a6ec0008397dd42808a8b1b0c5827f
+slsm_manifest_test  3cd0b35afcf6bc93e7b9e9b534f42e3ba7cf7cd96fae3bc93bd3d54a257d6da50
+slsm_sst_test       ed8174882a5c0fb84bf85463924ce2459d88dbf03e64c8ef649bab2e71b8c330
+```
+
+No kernel module was replaced or unloaded, and no host or Guest was rebooted.
+
 ## Observed warnings
 
 Both module loads emitted the inherited warnings:
@@ -199,23 +239,21 @@ inventory remain outside this repository.
 
 ## Claim boundary and next gate
 
-The original result establishes only the following chain:
+The combined result establishes only the following chain:
 
 ```text
 CN userspace buffer
   -> kernel-owned chunk regions and descriptor
   -> one RC connection
   -> SN one-sided RDMA READ
-  -> byte-pattern and checksum agreement
+  -> real SST validation, checksum agreement, and one point lookup
 ```
 
-It does not include Nova-LSM, a real SST key/value format, storage I/O,
-compaction, rFork, rMMap page faults, persistent epochs, range locks,
-persistence, failure recovery, containers, resource elasticity, or a scheduler.
-The Manifest is user-space metadata routing only; it is not durable and does
-not provide a full LSM read path.
+It does not include Nova-LSM, storage I/O, compaction, rFork, rMMap page faults,
+persistent epochs, range locks, persistence, failure recovery, containers,
+resource elasticity, or a scheduler. The SST and Manifest are user-space and
+process-local; this is one MemTable flush/read path, not a complete durable LSM.
 
-The next small-paper gate is to replace the deterministic byte pattern with a
-small real SST format and connect one MemTable flush/read path. That is the
-point at which a Nova-LSM-style user-space layout becomes meaningful; full
-Nova-LSM integration and compaction remain later work.
+The next gate is to measure repeated workloads and then decide whether a small
+Nova-LSM-style read API is needed. Full Nova-LSM integration, persistence, and
+compaction remain later work.
