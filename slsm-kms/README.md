@@ -43,6 +43,7 @@ slsm-user/
   slsm_sn.c                      RC client, RDMA reader, SST validator, and lookup
   slsm_sst.[ch]                  bounded SST and MemTable implementation
   slsm_sst_test.c                 offline SST flush/validate/lookup test
+  slsm_common_test.c              offline control-channel deadline test
   slsm_manifest.[ch]             minimal in-memory SST Manifest
   slsm_manifest_test.c            offline Manifest/lookup test
 ```
@@ -113,7 +114,7 @@ Because `/dev/slsm` exposes an unsafe global-rkey research path, both programs
 require `CAP_SYS_RAWIO` (normally root). Success requires a `stage4_result`
 JSON line with `status` set to `pass` from both roles. The result includes the
 SST record count, point-lookup result, Manifest version, and metadata. `make -C
-slsm-user test` runs both the Manifest and SST offline tests.
+slsm-user test` runs the control deadline, Manifest, and SST offline tests.
 
 ## Safety and limitations
 

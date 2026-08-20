@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,7 @@
 
 #define DEFAULT_DEVICE "/dev/slsm"
 #define CONNECT_ATTEMPTS 100
+#define CONNECT_ATTEMPT_TIMEOUT_MS 100
 #define CONNECT_RETRY_NSEC 100000000L
 
 static void usage(const char *program)
@@ -37,11 +39,34 @@ static int connect_with_retry(const char *address, uint16_t port)
         return -1;
     }
     for (attempt = 0; attempt < CONNECT_ATTEMPTS; ++attempt) {
+        struct pollfd poll_fd = {0};
+        int flags;
         int fd = socket(AF_INET, SOCK_STREAM, 0);
+
         if (fd < 0)
             return -1;
+        flags = fcntl(fd, F_GETFL, 0);
+        if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+            close(fd);
+            return -1;
+        }
         if (connect(fd, (struct sockaddr *)&remote, sizeof(remote)) == 0)
             return fd;
+        if (errno == EINPROGRESS) {
+            int socket_error = 0;
+            socklen_t error_length = sizeof(socket_error);
+            int status;
+
+            poll_fd.fd = fd;
+            poll_fd.events = POLLOUT;
+            status = poll(&poll_fd, 1, CONNECT_ATTEMPT_TIMEOUT_MS);
+            if (status > 0 && (poll_fd.revents & (POLLOUT | POLLERR | POLLHUP)) &&
+                getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &error_length) == 0 &&
+                socket_error == 0)
+                return fd;
+            if (socket_error != 0)
+                errno = socket_error;
+        }
         close(fd);
         nanosleep(&delay, NULL);
     }
@@ -79,6 +104,7 @@ int main(int argc, char **argv)
     int control_fd = -1;
     int device_fd = -1;
     int connected = 0;
+    int manifest_active = 0;
     int result = EXIT_FAILURE;
     int option;
 
@@ -119,6 +145,7 @@ int main(int argc, char **argv)
     if (message.magic != SLSM_CONTROL_MAGIC ||
         message.version != SLSM_LIFECYCLE_VERSION ||
         message.phase != SLSM_PHASE_PUBLISH ||
+        message.generation == 0 ||
         message.descriptor.version != SLSM_ABI_VERSION ||
         message.descriptor.total_length == 0 ||
         message.descriptor.total_length > SLSM_MAX_SST_SIZE ||
@@ -192,6 +219,7 @@ int main(int argc, char **argv)
         ack.status = manifest_status;
         goto disconnect_send_ack;
     }
+    manifest_active = 1;
     ack.phase = SLSM_PHASE_FETCH;
     ack.generation = message.generation;
     ack.status = 0;
@@ -243,6 +271,8 @@ int main(int argc, char **argv)
         perror("write COMMIT ack");
         goto disconnect;
     }
+    if (ack.status != 0)
+        goto disconnect;
 
     if (slsm_read_full(control_fd, &next, sizeof(next)) != 0) {
         perror("read REVOKE");
@@ -262,9 +292,7 @@ int main(int argc, char **argv)
         memcmp(&next.metadata, &message.metadata, sizeof(next.metadata)) != 0) {
         fprintf(stderr, "invalid REVOKE for generation=%" PRIu64 "\n", message.generation);
         ack.status = -EPROTO;
-        if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0)
-            result = EXIT_FAILURE;
-        goto disconnect;
+        goto revoke_ack;
     }
     manifest_status = slsm_manifest_revoke(&manifest, message.descriptor.sst_id);
     lookup_entry = slsm_manifest_lookup(&manifest, message.metadata.min_key,
@@ -277,19 +305,54 @@ int main(int argc, char **argv)
         ack.status = 0;
         ack.manifest_version = manifest.version;
         ack.lookup_sst_id = lookup_entry == NULL ? 0 : lookup_entry->descriptor.sst_id;
+        manifest_active = 0;
+    }
+revoke_ack:
+    if (manifest_active) {
+        int abort_status = slsm_manifest_abort(&manifest, message.descriptor.sst_id);
+
+        if (abort_status != 0) {
+            if (ack.status == 0)
+                ack.status = abort_status;
+            errno = -abort_status;
+            perror("slsm_manifest_abort");
+            result = EXIT_FAILURE;
+        }
+        manifest_active = 0;
+    }
+    if (connected) {
+        if (ioctl(device_fd, SLSM_IOCTL_DISCONNECT, 0) != 0) {
+            int disconnect_errno = errno;
+
+            perror("SLSM_IOCTL_DISCONNECT");
+            ack.status = ack.status == 0 ? -disconnect_errno : ack.status;
+            result = EXIT_FAILURE;
+        }
+        connected = 0;
     }
     if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
         perror("write REVOKE ack");
         goto disconnect;
     }
-    result = EXIT_SUCCESS;
+    if (ack.status == 0 && result == EXIT_FAILURE)
+        result = EXIT_SUCCESS;
 
 disconnect:
+    if (manifest_active) {
+        int abort_status = slsm_manifest_abort(&manifest, message.descriptor.sst_id);
+
+        if (abort_status != 0) {
+            errno = -abort_status;
+            perror("slsm_manifest_abort");
+            result = EXIT_FAILURE;
+        }
+        manifest_active = 0;
+    }
     if (connected && ioctl(device_fd, SLSM_IOCTL_DISCONNECT, 0) != 0) {
         perror("SLSM_IOCTL_DISCONNECT");
-        ack.status = -errno;
         result = EXIT_FAILURE;
     }
+    connected = 0;
     goto print_result;
 
 disconnect_send_ack:
@@ -297,6 +360,7 @@ disconnect_send_ack:
         perror("SLSM_IOCTL_DISCONNECT");
         result = EXIT_FAILURE;
     }
+    connected = 0;
 send_ack:
     if (control_fd >= 0 && slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
         perror("write result ack");

@@ -12,17 +12,28 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 #define DEFAULT_DEVICE "/dev/slsm"
-#define CONTROL_TIMEOUT_MS 60000
-
 static void usage(const char *program)
 {
     fprintf(stderr,
             "Usage: %s [--device PATH] [--bind IPv4] [--port PORT] "
             "[--records COUNT] [--sst-id ID] [--epoch E] [--level L]\n",
             program);
+}
+
+static uint64_t make_generation(uint64_t sst_id)
+{
+    struct timespec now;
+    uint64_t generation;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+        now = (struct timespec){.tv_sec = 0, .tv_nsec = 0};
+    generation = ((uint64_t)now.tv_sec << 32) ^ (uint64_t)now.tv_nsec ^
+                 ((uint64_t)getpid() << 16) ^ sst_id;
+    return generation == 0 ? UINT64_C(1) : generation;
 }
 
 static int create_listener(const char *address, uint16_t port)
@@ -193,7 +204,7 @@ int main(int argc, char **argv)
 
     poll_fd.fd = listener_fd;
     poll_fd.events = POLLIN;
-    if (poll(&poll_fd, 1, CONTROL_TIMEOUT_MS) <= 0) {
+    if (poll(&poll_fd, 1, SLSM_CONTROL_TIMEOUT_MS) <= 0) {
         if (errno == 0)
             errno = ETIMEDOUT;
         perror("waiting for SN");
@@ -207,7 +218,7 @@ int main(int argc, char **argv)
     message.magic = SLSM_CONTROL_MAGIC;
     message.version = SLSM_LIFECYCLE_VERSION;
     message.phase = SLSM_PHASE_PUBLISH;
-    message.generation = 1;
+    message.generation = make_generation(sst_id);
     message.descriptor = request.descriptor;
     message.metadata = metadata;
     if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
@@ -258,23 +269,25 @@ int main(int argc, char **argv)
         goto unregister;
     }
 
-    printf("{\"event\":\"stage4_result\",\"role\":\"cn\",\"status\":\"pass\","
-           "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
-           ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
-           "\"checksum\":\"0x%016" PRIx64 "\",\"sn_elapsed_us\":%" PRIu64
-           ",\"level\":%u,\"epoch\":%" PRIu64
-           ",\"key_range\":[%" PRIu64 ",%" PRIu64 "]"
-           ",\"records\":%u,\"manifest_version\":%" PRIu64 "}\n",
-           message.generation, sst_id, encoded_length, request.descriptor.chunk_count,
-           userspace_checksum, fetch_elapsed_us, message.metadata.level,
-           message.metadata.epoch, message.metadata.min_key, message.metadata.max_key,
-           (unsigned)memtable.count, ack.manifest_version);
     result = EXIT_SUCCESS;
 
 unregister:
     if (ioctl(device_fd, SLSM_IOCTL_UNREGISTER_REGION, 0) != 0) {
         perror("SLSM_IOCTL_UNREGISTER_REGION");
         result = EXIT_FAILURE;
+    }
+    if (result == EXIT_SUCCESS) {
+        printf("{\"event\":\"stage4_result\",\"role\":\"cn\",\"status\":\"pass\","
+               "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
+               ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
+               "\"checksum\":\"0x%016" PRIx64 "\",\"sn_elapsed_us\":%" PRIu64
+               ",\"level\":%u,\"epoch\":%" PRIu64
+               ",\"key_range\":[%" PRIu64 ",%" PRIu64 "]"
+               ",\"records\":%u,\"manifest_version\":%" PRIu64 "}\n",
+               message.generation, sst_id, encoded_length, request.descriptor.chunk_count,
+               userspace_checksum, fetch_elapsed_us, message.metadata.level,
+               message.metadata.epoch, message.metadata.min_key, message.metadata.max_key,
+               (unsigned)memtable.count, ack.manifest_version);
     }
 out:
     if (client_fd >= 0)

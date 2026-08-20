@@ -95,6 +95,28 @@ int slsm_manifest_revoke(struct slsm_manifest *manifest, uint64_t sst_id)
     return -ENOENT;
 }
 
+int slsm_manifest_abort(struct slsm_manifest *manifest, uint64_t sst_id)
+{
+    uint32_t index;
+
+    if (manifest == NULL || sst_id == 0)
+        return -EINVAL;
+    for (index = 0; index < manifest->count; ++index) {
+        if (manifest->entries[index].descriptor.sst_id != sst_id)
+            continue;
+        if (index + 1 < manifest->count) {
+            memmove(&manifest->entries[index], &manifest->entries[index + 1],
+                    (manifest->count - index - 1) * sizeof(manifest->entries[0]));
+        }
+        --manifest->count;
+        memset(&manifest->entries[manifest->count], 0,
+               sizeof(manifest->entries[manifest->count]));
+        ++manifest->version;
+        return 0;
+    }
+    return -ENOENT;
+}
+
 const struct slsm_manifest_entry *slsm_manifest_lookup(
     const struct slsm_manifest *manifest, uint64_t key, uint64_t epoch)
 {

@@ -32,6 +32,7 @@ int slsm_manifest_publish(struct slsm_manifest *manifest,
 int slsm_manifest_commit(struct slsm_manifest *manifest, uint64_t sst_id,
                          uint64_t epoch);
 int slsm_manifest_revoke(struct slsm_manifest *manifest, uint64_t sst_id);
+int slsm_manifest_abort(struct slsm_manifest *manifest, uint64_t sst_id);
 const struct slsm_manifest_entry *slsm_manifest_lookup(
     const struct slsm_manifest *manifest, uint64_t key, uint64_t epoch);
 

@@ -43,7 +43,9 @@ int main(void)
     assert(slsm_manifest_lookup(&manifest, 75, 1) == NULL);
     assert(slsm_manifest_commit(&manifest, first.sst_id, 2) == -EINVAL);
     assert(slsm_manifest_revoke(&manifest, first.sst_id) == -EINVAL);
-    assert(slsm_manifest_publish(&manifest, &first_meta, &first) == -EEXIST);
+    assert(slsm_manifest_abort(&manifest, first.sst_id) == 0);
+    assert(slsm_manifest_abort(&manifest, first.sst_id) == -ENOENT);
+    assert(slsm_manifest_publish(&manifest, &first_meta, &first) == 0);
     assert(slsm_manifest_publish(&manifest, &second_meta, &second) == 0);
     assert(slsm_manifest_commit(&manifest, first.sst_id, first_meta.epoch) == 0);
     assert(slsm_manifest_commit(&manifest, second.sst_id, second_meta.epoch) == 0);

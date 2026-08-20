@@ -207,6 +207,41 @@ slsm_sst_test       ed8174882a5c0fb84bf85463924ce2459d88dbf03e64c8ef649bab2e71b8
 
 No kernel module was replaced or unloaded, and no host or Guest was rebooted.
 
+## Control-plane hardening (offline only)
+
+After the Stage 4 Guest checks, the userspace control path was tightened
+without changing the kernel descriptor or RDMA ABI. Framed TCP reads and writes
+now use an absolute 60-second deadline, so a peer that keeps a connection open
+without completing a lifecycle message cannot retain the userspace session
+indefinitely. The SN removes the session's pending or committed Manifest entry
+on every failed post-PUBLISH path. For the successful REVOKE exchange it
+disconnects the local QP before sending the final ACK, and the CN reports pass
+only after `UNREGISTER_REGION` succeeds. CN generations are nonzero and vary
+per run; the SN rejects a zero generation.
+
+The changes were compiled and tested offline only. No module was loaded, no
+Guest session was rerun, and no physical host or RNIC operation was performed.
+
+```text
+{"event":"common_test","status":"pass","timeout_ms":20}
+{"event":"manifest_test","status":"pass","entries":2,
+ "lookup_key":75,"final_count":0,"version":8}
+{"event":"sst_test","status":"pass","records":3,"bytes":104,
+ "lookup_key":20,"lookup_value":222}
+```
+
+The compile-only userspace hashes are listed below after the build. These are
+source-build evidence only; the earlier Guest-run hashes in the Stage 4 section
+remain the only runtime-validated artifacts.
+
+```text
+slsm_cn             469d8957f9d01ab8b4f00cdd98a2581db6e1652ed25ec54cffbbc9d0a7084a28
+slsm_sn             931b92c31b6d3a7151c9d97f66559db1719c808d0ac5c2adc9aa223bf1df28f6
+slsm_common_test    f2f234a0c62aa2721119df0a336f934188f1e21e58b7182ed44d3490c20f5568
+slsm_manifest_test  973eadc30218554db21c37cb1e471bef7410ec5f002d160a28d81ddb0dcb0029
+slsm_sst_test       ed8174882a5c0fb84bf85463924ce2459d88dbf03e64c8ef649bab2e71b8c330
+```
+
 ## Observed warnings
 
 Both module loads emitted the inherited warnings:
