@@ -271,7 +271,7 @@ Offline verification from `slsm-user/`:
 {"event":"manifest_test","status":"pass","entries":2,"lookup_key":75,"final_count":0,"version":8}
 {"event":"sst_test","status":"pass","format":"nova-leveldb-table","records":3,"bytes":231,"lookup_key":20,"lookup_value":222}
 {"event":"common_test","status":"pass","timeout_ms":20}
-{"event":"nova_sst_test","status":"pass","entries":4,"bytes":167,"lookup_sequence":2}
+{"event":"nova_sst_test","status":"pass","entries":32,"bytes":767,"lookup_sequence":2}
 ```
 
 The new user-space binaries were compile-only artifacts; their SHA-256 values
