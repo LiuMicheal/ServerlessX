@@ -13,6 +13,7 @@ modules.order
 scripts/*.sh
 scripts/*.py
 build/
+slsm-user/bin/
 .vscode/
 scripts/*.toml
 scripts/exp

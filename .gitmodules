@@ -6,4 +6,5 @@
 	url = https://github.com/ProjectMitosisOS/hashbrown.git
 [submodule "deps/krcore"]
 	path = deps/krcore
-	url = https://github.com/SJTU-IPADS/krcore-artifacts.git
+	url = https://github.com/LiuMicheal/ServerlessX.git
+	branch = deps/krcore-zero-rc-padding-20260820

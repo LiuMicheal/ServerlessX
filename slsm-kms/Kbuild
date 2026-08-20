@@ -1,0 +1,20 @@
+obj-m := slsm.o
+slsm-objs := slsm.rust.o
+
+CARGO ?= cargo
+TARGET ?= x86_64-unknown-none-linuxkernel
+
+export c_flags
+
+$(src)/target/$(TARGET)/debug/libslsm.a: cargo_will_determine_dependencies
+	cd $(src)/slsm; CARGO_TARGET_DIR=../target $(CARGO) build -Z build-std=core,alloc --target=$(TARGET)
+
+.PHONY: cargo_will_determine_dependencies
+
+quiet_cmd_rustld = LD [R]  $@
+      cmd_rustld = $(LD) -r -o $@ --whole-archive $(real-prereqs)
+
+$(obj)/slsm.rust.o: $(src)/target/$(TARGET)/debug/libslsm.a FORCE
+	$(call if_changed,rustld)
+
+targets += slsm.rust.o

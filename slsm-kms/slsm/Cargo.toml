@@ -1,0 +1,23 @@
+[workspace]
+
+[package]
+name = "slsm"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+crate-type = ["staticlib"]
+test = false
+
+[dependencies]
+KRdmaKit = { path = "../../deps/krcore/KRdmaKit", features = ["kernel"] }
+
+[profile.dev]
+opt-level = 2
+debug = false
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = "unwind"
+incremental = false
+codegen-units = 16
