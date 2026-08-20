@@ -17,6 +17,8 @@ Use the documents in this order:
    for the decisions and work through the native-core import.
 9. [SPD 5.14 P0-P2 progress](research/spd-5.14-p0-p2-progress.md) for the
    sanitized compile gate and research boundary.
+10. [SLSM Stage 1 RC SST-fetch note](research/slsm-stage1-rc-poc-20260820.md)
+    for the external two-Guest correctness evidence and its claim boundary.
 
 Documentation describes the boundary that the code and profile declarations
 actually support. When evidence and prose disagree, the narrower claim wins

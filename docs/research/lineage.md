@@ -33,8 +33,15 @@ Wiseswap: kernel-space programmable RDMA substrate
 
 Only ServerlessPD-centered implementation boundaries are included in this
 snapshot: the portable SPD contract, TinyLlama workload, C++ native GDR source,
-and C rfork userspace runtime. The other three systems are research lineage and
-roadmap entries, not bundled implementations or runnable profiles.
+and C rfork userspace runtime. The other three systems are not bundled
+implementations or runnable profiles. ServerlessLSM additionally has a
+sanitized external Stage 1 RC SST-fetch correctness note, which does not change
+that repository boundary.
+
+See [the SLSM Stage 1 note](slsm-stage1-rc-poc-20260820.md) for the external
+evidence and the distinction between the original tested artifact and the
+hardened source that has compile-only verification and is still pending load and
+runtime retest.
 
 The historical `serverlesspd.*.v1` identifiers and legacy PKV layout are kept in
 the portable contract to avoid silently changing the experiment wire format.

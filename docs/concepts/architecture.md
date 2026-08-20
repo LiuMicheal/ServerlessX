@@ -19,8 +19,9 @@ Wiseswap: programmable RDMA network substrate
 This map describes the research lineage, not the contents of the current
 development snapshot. Only the ServerlessPD-centered boundaries described below
 have implementation code in this repository. Wiseswap, ServerlessRec, and
-ServerlessLSM currently have status pages but no runnable implementation or
-profile.
+ServerlessLSM have no bundled runnable implementation or profile. SLSM has a
+separate external Stage 1 correctness note for an RC SST-fetch mechanism; that
+note does not represent RDMA mmap, LSM semantics, or repository code.
 
 ## Current repository implementation
 
@@ -71,7 +72,9 @@ mean it is bundled, runnable, or acceptable for an ASF release.
 The CPU contract and rfork unit test run without hardware. Native GDR source can
 be compiled on a prepared CUDA/RDMA host. Actual GPU transfer, remote fork, and
 PhOS reproduction remain separate hardware evidence levels and must not be
-inferred from a successful unit test or build.
+inferred from a successful unit test or build. The external SLSM Stage 1 Guest
+run is likewise a narrow correctness result, not a bundled deployment,
+performance result, or end-to-end LSM claim.
 
 See [current status](../status.md) for the exact included, build-only,
 reference-only, and roadmap boundaries.

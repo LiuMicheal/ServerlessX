@@ -13,8 +13,9 @@ immediately while preserving a path toward a larger public project.
 - External backend records for Mitosis and PhOS.
 - Profile declarations for CUDA, RDMA DMA-BUF, and PhOS deployment work.
 - Provenance and licensing records with external source excluded.
-- Research status pages for Wiseswap, ServerlessRec, and ServerlessLSM. These
-  pages do not imply that implementations or runnable profiles are included.
+- Research status pages for Wiseswap and ServerlessRec, plus a sanitized
+  external Stage 1 correctness note for ServerlessLSM. These documents do not
+  imply that an implementation or runnable profile is included.
 
 ## Research-system roadmap
 
@@ -22,10 +23,14 @@ immediately while preserving a path toward a larger public project.
   tests, and evidence; do not relabel the included SPD native code as Wiseswap.
 - ServerlessRec: add the RDMA Map and recommendation-inference path only after
   its ownership, interfaces, dependencies, tests, and evidence are concrete.
-- ServerlessLSM: add the RDMA mmap and LSM-tree path under the same gates.
+- ServerlessLSM: retain the external Stage 1 RC SST-fetch result as
+  evidence-only, then add the RDMA mmap and LSM-tree path under the same gates
+  only after source ownership, interfaces, dependencies, tests, and evidence
+  are concrete.
 
 Until then, ServerlessPD is the only application-facing system with executable
-code in this repository.
+code in this repository. The SLSM Stage 1 note is external Guest correctness
+evidence, not executable code in this repository.
 
 ## Public release gate
 

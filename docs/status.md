@@ -1,7 +1,7 @@
 # Current status
 
 This page is the concise source of truth for release-scope statements in talks,
-papers, demos, and repository descriptions. It was last reviewed on 2026-08-10.
+papers, demos, and repository descriptions. It was last reviewed on 2026-08-20.
 When prose and executable profiles disagree, the narrower profile claim wins.
 
 ## Access and licensing
@@ -31,11 +31,17 @@ visible source preview and retain the licensing warning.
 | PhOS backend | No; identity record only | Historical controlled-lab context | External, separately supplied research backend |
 | Wiseswap | Status page only | No implementation or profile | Research lineage and roadmap only |
 | ServerlessRec | Status page only | No implementation or profile | RDMA Map research lineage and roadmap only |
-| ServerlessLSM | Status page only | No implementation or profile | RDMA mmap research lineage and roadmap only |
+| ServerlessLSM | No; external prototype only | Sanitized note records an original two-Guest RC SST-fetch correctness gate; hardened source has an exact-Guest compile-only verification but no load or correctness rerun; nothing is bundled | Mechanism-only external evidence; no runnable profile, performance, or end-to-end LSM claim |
 
 The performance numbers reported in the Wiseswap, ServerlessPD, ServerlessRec,
 and ServerlessLSM papers are research results. They are not automatically
 reproduced by the current GitHub quickstart.
+
+The [SLSM Stage 1 note](research/slsm-stage1-rc-poc-20260820.md) records
+external evidence only. The successful result belongs to the original artifact;
+the later hardened source has been compile-verified but has not been loaded or
+rerun. This does not change the absence of a bundled SLSM implementation or
+executable profile.
 
 ## What a new user can run
 
