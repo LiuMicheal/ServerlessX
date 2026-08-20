@@ -14,6 +14,7 @@ use crate::queue_pairs::{QueuePair, QueuePairBuilder};
 #[derive(Copy, Clone, Debug)]
 pub struct RCConnectionData {
     pub lid: u16,
+    _reserved: [u8; 6],
     pub gid: ib_gid,
 }
 
@@ -35,7 +36,11 @@ impl RCConnectionData {
             .map_err(|err| CMError::Creation(err.to_kernel_errno()))?;
 
 
-        Ok(Self { lid : port_attr.lid as _, gid })
+        Ok(Self {
+            lid: port_attr.lid as _,
+            _reserved: [0; 6],
+            gid,
+        })
     }
 }
 
