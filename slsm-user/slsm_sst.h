@@ -7,8 +7,16 @@
 #include "include/slsm_uapi.h"
 
 #define SLSM_SST_MAGIC UINT32_C(0x53535431)
-#define SLSM_SST_VERSION 1U
+#define SLSM_SST_VERSION 2U
 #define SLSM_SST_MAX_RECORDS 32U
+
+/*
+ * The payload is a small clean-room LevelDB/Nova table: one data block, an
+ * empty metaindex block, one index block, and the standard 48-byte footer.
+ * The bound keeps the test SST comfortably below the existing 8 MiB RDMA
+ * descriptor limit while leaving room for worst-case varint encodings.
+ */
+#define SLSM_NOVA_TABLE_MAX_SIZE 2048U
 
 struct slsm_sst_record {
     uint64_t key;
@@ -28,8 +36,7 @@ struct slsm_sst_header {
 };
 
 #define SLSM_SST_MAX_SIZE \
-    (sizeof(struct slsm_sst_header) + \
-     SLSM_SST_MAX_RECORDS * sizeof(struct slsm_sst_record))
+    (sizeof(struct slsm_sst_header) + SLSM_NOVA_TABLE_MAX_SIZE)
 
 struct slsm_memtable {
     size_t count;

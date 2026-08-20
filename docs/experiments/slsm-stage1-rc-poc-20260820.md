@@ -242,6 +242,41 @@ slsm_manifest_test  973eadc30218554db21c37cb1e471bef7410ec5f002d160a28d81ddb0dcb
 slsm_sst_test       ed8174882a5c0fb84bf85463924ce2459d88dbf03e64c8ef649bab2e71b8c330
 ```
 
+## Nova-compatible SST adapter (offline only)
+
+The GitHub snapshot used for the format audit was cloned directly from
+`https://github.com/HaoyuHuang/NovaLSM` at commit
+`8a661197ce5b993f2baeef608f34192d1ef0adf5` (2021-06-20). The complete Nova
+database cannot be linked into this small C client without its configuration,
+remote-storage, RDMA, Manifest, and compaction runtime. We therefore kept the
+SLSM header and kernel descriptor unchanged and added a small, dependency-free
+adapter for the format semantics visible in Nova's `TableBuilder` and reader:
+
+- LevelDB/Nova internal keys (`user key + 8-byte sequence/type tag`), with
+  bytewise user-key ordering and descending sequence ordering;
+- one prefix-compressed data block with restart metadata;
+- an empty metaindex block, one index block, masked CRC32C block trailers, and
+  Nova's 48-byte table footer;
+- snapshot-aware point lookup and corruption checks after the RDMA fetch.
+
+This is a format/lookup compatibility layer, not a claim that the full Nova
+LSM engine or its compaction and storage services are reproduced. The outer
+SLSM header continues to carry `sst_id`, `epoch`, record count, and key range,
+so the existing `PUBLISH -> FETCH -> COMMIT -> REVOKE` control lifecycle and
+kernel ABI remain unchanged.
+
+Offline verification from `slsm-user/`:
+
+```text
+{"event":"manifest_test","status":"pass","entries":2,"lookup_key":75,"final_count":0,"version":8}
+{"event":"sst_test","status":"pass","format":"nova-leveldb-table","records":3,"bytes":231,"lookup_key":20,"lookup_value":222}
+{"event":"common_test","status":"pass","timeout_ms":20}
+{"event":"nova_sst_test","status":"pass","entries":4,"bytes":167,"lookup_sequence":2}
+```
+
+These are source-build/offline results. No Guest session, module load, Host
+reboot, or physical RNIC operation was performed for this adapter change.
+
 ## Observed warnings
 
 Both module loads emitted the inherited warnings:

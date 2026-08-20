@@ -6,16 +6,19 @@ MemTable into an SST, publish its descriptor, and a storage node (SN) can fetch
 the SST through one-sided RC RDMA READs, validate it, and perform a point lookup
 before exposing it through a small user-space Manifest.
 
-It is not Nova-LSM integration and it does not implement storage I/O,
+It is not the complete Nova-LSM database. The user-space payload now uses a
+small dependency-free subset of Nova's LevelDB-compatible table semantics:
+internal keys, prefix-compressed data blocks, an index block, CRC32C block
+trailers, and the standard footer. It does not implement storage I/O,
 compaction, `mmap`, range locks, persistence, recovery, function lifecycle
-management, or scheduling. The SST and Manifest are in-memory and user-space
-only.
+management, or scheduling. The SST and Manifest are still in-memory and
+user-space only.
 
 ## Data path
 
-1. `slsm_cn` inserts a small deterministic set of key/value pairs into a
-   MemTable, flushes it into an SST, and registers the exact encoded bytes
-   through `/dev/slsm`.
+1. `slsm_cn` inserts a small sorted set of key/value pairs into a MemTable,
+   flushes it into a Nova-compatible SST payload, and registers the exact
+   encoded bytes through `/dev/slsm`.
 2. `slsm.ko` copies the buffer into up to eight 1 MiB kernel memory regions and
    returns a versioned descriptor containing the owner GID, remote addresses,
    lengths, rkeys, and checksum.
@@ -41,8 +44,10 @@ slsm-user/
   include/slsm_uapi.h            shared ABI and descriptor definitions
   slsm_cn.c                      MemTable flush, region owner, and listener
   slsm_sn.c                      RC client, RDMA reader, SST validator, and lookup
-  slsm_sst.[ch]                  bounded SST and MemTable implementation
+  slsm_sst.[ch]                  SLSM header plus MemTable/Nova adapter
+  slsm_nova_sst.[ch]             dependency-free Nova/LevelDB table subset
   slsm_sst_test.c                 offline SST flush/validate/lookup test
+  slsm_nova_sst_test.c            offline internal-key/table-format test
   slsm_common_test.c              offline control-channel deadline test
   slsm_manifest.[ch]             minimal in-memory SST Manifest
   slsm_manifest_test.c            offline Manifest/lookup test

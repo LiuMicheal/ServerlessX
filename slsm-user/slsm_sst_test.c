@@ -24,12 +24,14 @@ int main(void)
                           &metadata) == 0);
     assert(metadata.min_key == 10 && metadata.max_key == 30);
     assert(slsm_sst_validate(buffer, length, 700, 9, &header) == 0);
-    assert(header.record_count == 3);
+    assert(header.version == SLSM_SST_VERSION && header.record_count == 3);
+    assert(header.payload_bytes > header.record_count * sizeof(struct slsm_sst_record));
     assert(slsm_sst_lookup(buffer, length, 20, &value) == 0 && value == 222);
     assert(slsm_sst_lookup(buffer, length, 25, &value) == -ENOENT);
     assert(slsm_sst_validate(buffer, length - 1, 700, 9, NULL) == -EBADMSG);
 
     printf("{\"event\":\"sst_test\",\"status\":\"pass\","
+           "\"format\":\"nova-leveldb-table\","
            "\"records\":%u,\"bytes\":%zu,\"lookup_key\":20,"
            "\"lookup_value\":%" PRIu64 "}\n",
            header.record_count, length, value);
