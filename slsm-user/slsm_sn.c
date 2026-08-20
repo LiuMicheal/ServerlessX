@@ -1,4 +1,5 @@
 #include "slsm_common.h"
+#include "slsm_manifest.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -67,6 +68,9 @@ int main(int argc, char **argv)
     };
     struct slsm_connect_req connect_request = {0};
     struct slsm_fetch_req fetch_request = {0};
+    struct slsm_manifest manifest;
+    const struct slsm_manifest_entry *lookup_entry;
+    int manifest_status;
     uint64_t userspace_checksum = 0;
     void *buffer = NULL;
     int control_fd = -1;
@@ -74,6 +78,8 @@ int main(int argc, char **argv)
     int connected = 0;
     int result = EXIT_FAILURE;
     int option;
+
+    slsm_manifest_init(&manifest);
 
     while ((option = getopt_long(argc, argv, "d:s:p:h", options, NULL)) != -1) {
         switch (option) {
@@ -112,7 +118,11 @@ int main(int argc, char **argv)
         message.phase != SLSM_PHASE_PUBLISH ||
         message.descriptor.version != SLSM_ABI_VERSION ||
         message.descriptor.total_length == 0 ||
-        message.descriptor.total_length > SLSM_MAX_SST_SIZE) {
+        message.descriptor.total_length > SLSM_MAX_SST_SIZE ||
+        message.metadata.version != SLSM_METADATA_VERSION ||
+        message.metadata.level > SLSM_MAX_SST_LEVEL ||
+        message.metadata.epoch == 0 ||
+        message.metadata.min_key > message.metadata.max_key) {
         fprintf(stderr, "invalid PUBLISH from CN\n");
         ack.status = -EINVAL;
         goto send_ack;
@@ -165,12 +175,22 @@ int main(int argc, char **argv)
         ack.status = -EBADMSG;
         goto disconnect_send_ack;
     }
+    manifest_status = slsm_manifest_publish(&manifest, &message.metadata,
+                                            &message.descriptor);
+    if (manifest_status != 0) {
+        ack.phase = SLSM_PHASE_FETCH;
+        ack.generation = message.generation;
+        ack.status = manifest_status;
+        goto disconnect_send_ack;
+    }
     ack.phase = SLSM_PHASE_FETCH;
     ack.generation = message.generation;
     ack.status = 0;
     ack.fetched_length = fetch_request.fetched_length;
     ack.checksum = userspace_checksum;
     ack.elapsed_us = fetch_request.elapsed_us;
+    ack.manifest_version = manifest.version;
+    ack.lookup_sst_id = 0;
     if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
         perror("write FETCH ack");
         goto disconnect;
@@ -190,14 +210,26 @@ int main(int argc, char **argv)
         next.version != SLSM_LIFECYCLE_VERSION ||
         next.phase != SLSM_PHASE_COMMIT ||
         next.generation != message.generation ||
-        memcmp(&next.descriptor, &message.descriptor, sizeof(next.descriptor)) != 0) {
+        memcmp(&next.descriptor, &message.descriptor, sizeof(next.descriptor)) != 0 ||
+        memcmp(&next.metadata, &message.metadata, sizeof(next.metadata)) != 0) {
         fprintf(stderr, "invalid COMMIT for generation=%" PRIu64 "\n", message.generation);
         ack.status = -EPROTO;
         if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0)
             result = EXIT_FAILURE;
         goto disconnect;
     }
-    ack.status = 0;
+    manifest_status = slsm_manifest_commit(&manifest, message.descriptor.sst_id,
+                                           message.metadata.epoch);
+    lookup_entry = slsm_manifest_lookup(&manifest, message.metadata.min_key,
+                                        message.metadata.epoch);
+    if (manifest_status != 0 || lookup_entry == NULL ||
+        lookup_entry->descriptor.sst_id != message.descriptor.sst_id) {
+        ack.status = manifest_status != 0 ? manifest_status : -EBADMSG;
+    } else {
+        ack.status = 0;
+        ack.manifest_version = manifest.version;
+        ack.lookup_sst_id = lookup_entry->descriptor.sst_id;
+    }
     if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
         perror("write COMMIT ack");
         goto disconnect;
@@ -217,14 +249,26 @@ int main(int argc, char **argv)
         next.version != SLSM_LIFECYCLE_VERSION ||
         next.phase != SLSM_PHASE_REVOKE ||
         next.generation != message.generation ||
-        memcmp(&next.descriptor, &message.descriptor, sizeof(next.descriptor)) != 0) {
+        memcmp(&next.descriptor, &message.descriptor, sizeof(next.descriptor)) != 0 ||
+        memcmp(&next.metadata, &message.metadata, sizeof(next.metadata)) != 0) {
         fprintf(stderr, "invalid REVOKE for generation=%" PRIu64 "\n", message.generation);
         ack.status = -EPROTO;
         if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0)
             result = EXIT_FAILURE;
         goto disconnect;
     }
-    ack.status = 0;
+    manifest_status = slsm_manifest_revoke(&manifest, message.descriptor.sst_id);
+    lookup_entry = slsm_manifest_lookup(&manifest, message.metadata.min_key,
+                                        message.metadata.epoch);
+    if (manifest_status != 0 ||
+        (lookup_entry != NULL &&
+         lookup_entry->descriptor.sst_id == message.descriptor.sst_id)) {
+        ack.status = manifest_status != 0 ? manifest_status : -EBUSY;
+    } else {
+        ack.status = 0;
+        ack.manifest_version = manifest.version;
+        ack.lookup_sst_id = lookup_entry == NULL ? 0 : lookup_entry->descriptor.sst_id;
+    }
     if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
         perror("write REVOKE ack");
         goto disconnect;
@@ -251,13 +295,15 @@ send_ack:
     }
 print_result:
     if (result == EXIT_SUCCESS) {
-        printf("{\"event\":\"stage2_result\",\"role\":\"sn\",\"status\":\"pass\","
+        printf("{\"event\":\"stage3_result\",\"role\":\"sn\",\"status\":\"pass\","
                "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
                ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
-               "\"checksum\":\"0x%016" PRIx64 "\",\"elapsed_us\":%" PRIu64 "}\n",
+               "\"checksum\":\"0x%016" PRIx64 "\",\"elapsed_us\":%" PRIu64
+               ",\"manifest_version\":%" PRIu64 "}\n",
                message.generation,
                message.descriptor.sst_id, fetch_request.fetched_length,
-               message.descriptor.chunk_count, userspace_checksum, fetch_request.elapsed_us);
+               message.descriptor.chunk_count, userspace_checksum, fetch_request.elapsed_us,
+               manifest.version);
     }
 out:
     if (device_fd >= 0)

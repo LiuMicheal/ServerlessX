@@ -20,7 +20,7 @@ static void usage(const char *program)
 {
     fprintf(stderr,
             "Usage: %s [--device PATH] [--bind IPv4] [--port PORT] "
-            "[--size BYTES] [--sst-id ID]\n",
+            "[--size BYTES] [--sst-id ID] [--epoch E] [--level L]\n",
             program);
 }
 
@@ -58,6 +58,8 @@ int main(int argc, char **argv)
         {"port", required_argument, NULL, 'p'},
         {"size", required_argument, NULL, 's'},
         {"sst-id", required_argument, NULL, 'i'},
+        {"epoch", required_argument, NULL, 'e'},
+        {"level", required_argument, NULL, 'l'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
@@ -66,12 +68,15 @@ int main(int argc, char **argv)
     uint16_t port = SLSM_CONTROL_PORT;
     uint64_t size = SLSM_MAX_SST_SIZE;
     uint64_t sst_id = 1;
+    uint64_t epoch = 1;
+    uint64_t level = 0;
     struct slsm_register_req request = {0};
     struct slsm_lifecycle_message message = {0};
     struct slsm_lifecycle_ack ack = {0};
     struct pollfd poll_fd;
     uint64_t userspace_checksum;
     uint64_t fetch_elapsed_us = 0;
+    uint64_t commit_manifest_version = 0;
     void *buffer = NULL;
     int device_fd = -1;
     int listener_fd = -1;
@@ -79,7 +84,7 @@ int main(int argc, char **argv)
     int result = EXIT_FAILURE;
     int option;
 
-    while ((option = getopt_long(argc, argv, "d:b:p:s:i:h", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "d:b:p:s:i:e:l:h", options, NULL)) != -1) {
         switch (option) {
         case 'd': device = optarg; break;
         case 'b': bind_address = optarg; break;
@@ -101,6 +106,18 @@ int main(int argc, char **argv)
                 return EXIT_FAILURE;
             }
             break;
+        case 'e':
+            if (slsm_parse_u64(optarg, &epoch) != 0 || epoch == 0) {
+                usage(argv[0]);
+                return EXIT_FAILURE;
+            }
+            break;
+        case 'l':
+            if (slsm_parse_u64(optarg, &level) != 0 || level > SLSM_MAX_SST_LEVEL) {
+                usage(argv[0]);
+                return EXIT_FAILURE;
+            }
+            break;
         case 'h': usage(argv[0]); return EXIT_SUCCESS;
         default: usage(argv[0]); return EXIT_FAILURE;
         }
@@ -118,6 +135,11 @@ int main(int argc, char **argv)
     }
     slsm_fill_sst(buffer, (size_t)size, sst_id);
     userspace_checksum = slsm_fnv1a(buffer, (size_t)size);
+
+    if (sst_id > (UINT64_MAX - UINT64_C(999)) / UINT64_C(1000)) {
+        fprintf(stderr, "sst-id is too large for the default key range\n");
+        goto out;
+    }
 
     device_fd = open(device, O_RDWR | O_CLOEXEC);
     if (device_fd < 0) {
@@ -166,6 +188,13 @@ int main(int argc, char **argv)
     message.phase = SLSM_PHASE_PUBLISH;
     message.generation = 1;
     message.descriptor = request.descriptor;
+    message.metadata = (struct slsm_sst_metadata){
+        .version = SLSM_METADATA_VERSION,
+        .level = (uint16_t)level,
+        .epoch = epoch,
+        .min_key = sst_id * UINT64_C(1000),
+        .max_key = sst_id * UINT64_C(1000) + UINT64_C(999),
+    };
     if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
         slsm_read_full(client_fd, &ack, sizeof(ack)) != 0) {
         perror("publish exchange");
@@ -191,11 +220,12 @@ int main(int argc, char **argv)
     }
     if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
         ack.phase != SLSM_PHASE_COMMIT || ack.generation != message.generation ||
-        ack.status != 0) {
+        ack.status != 0 || ack.manifest_version == 0 || ack.lookup_sst_id != sst_id) {
         fprintf(stderr, "SN rejected COMMIT: status=%d generation=%" PRIu64 "\n",
                 ack.status, ack.generation);
         goto unregister;
     }
+    commit_manifest_version = ack.manifest_version;
 
     message.phase = SLSM_PHASE_REVOKE;
     ack = (struct slsm_lifecycle_ack){0};
@@ -206,18 +236,24 @@ int main(int argc, char **argv)
     }
     if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
         ack.phase != SLSM_PHASE_REVOKE || ack.generation != message.generation ||
-        ack.status != 0) {
+        ack.status != 0 || ack.manifest_version <= commit_manifest_version ||
+        ack.lookup_sst_id == sst_id) {
         fprintf(stderr, "SN rejected REVOKE: status=%d generation=%" PRIu64 "\n",
                 ack.status, ack.generation);
         goto unregister;
     }
 
-    printf("{\"event\":\"stage2_result\",\"role\":\"cn\",\"status\":\"pass\","
+    printf("{\"event\":\"stage3_result\",\"role\":\"cn\",\"status\":\"pass\","
            "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
            ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
-           "\"checksum\":\"0x%016" PRIx64 "\",\"sn_elapsed_us\":%" PRIu64 "}\n",
+           "\"checksum\":\"0x%016" PRIx64 "\",\"sn_elapsed_us\":%" PRIu64
+           ",\"level\":%u,\"epoch\":%" PRIu64
+           ",\"key_range\":[%" PRIu64 ",%" PRIu64 "]"
+           ",\"manifest_version\":%" PRIu64 "}\n",
            message.generation, sst_id, size, request.descriptor.chunk_count,
-           userspace_checksum, fetch_elapsed_us);
+           userspace_checksum, fetch_elapsed_us, message.metadata.level,
+           message.metadata.epoch, message.metadata.min_key, message.metadata.max_key,
+           ack.manifest_version);
     result = EXIT_SUCCESS;
 
 unregister:

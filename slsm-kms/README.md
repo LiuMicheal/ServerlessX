@@ -1,13 +1,13 @@
 # SLSM Stage 1 RC SST Fetch
 
 This directory contains the first mechanism-only ServerlessLSM prototype. It
-establishes one narrow contract: a compute node (CN) can publish an in-memory
+establishes a narrow contract: a compute node (CN) can publish an in-memory
 SST descriptor and a storage node (SN) can fetch the SST through one-sided RC
-RDMA READs.
+RDMA READs, then expose the fetched SST through a small user-space Manifest.
 
 It is not Nova-LSM integration and it does not implement flush, compaction,
-`mmap`, epochs, range locks, Manifest updates, persistence, recovery, function
-lifecycle management, or scheduling.
+`mmap`, range locks, persistence, recovery, function lifecycle management, or
+scheduling. The Manifest is in-memory and user-space only.
 
 ## Data path
 
@@ -16,12 +16,14 @@ lifecycle management, or scheduling.
 2. `slsm.ko` copies the buffer into up to eight 1 MiB kernel memory regions and
    returns a versioned descriptor containing the owner GID, remote addresses,
    lengths, rkeys, and checksum.
-3. The CN sends that descriptor to `slsm_sn` over a small TCP control channel.
+3. The CN sends that descriptor and its LSM metadata (`level`, `epoch`, and key
+   range) to `slsm_sn` over a small TCP control channel.
 4. The SN asks its local `slsm.ko` to create one RC connection and fetch each
    chunk with RDMA READ.
 5. Kernel and userspace independently verify an FNV-1a checksum and the SN
    returns a FETCH acknowledgement to the CN.
-6. The CN and SN complete the control-only `COMMIT` and `REVOKE` phases.
+6. The SN inserts the SST as pending in its in-memory Manifest; `COMMIT` makes
+   it visible to an epoch/key lookup, and `REVOKE` removes that visibility.
 
 The control channel carries metadata only. SST bytes move through RDMA.
 
@@ -36,6 +38,8 @@ slsm-user/
   include/slsm_uapi.h            shared ABI and descriptor definitions
   slsm_cn.c                      region owner and control listener
   slsm_sn.c                      RC client, RDMA reader, and validator
+  slsm_manifest.[ch]             minimal in-memory SST Manifest
+  slsm_manifest_test.c            offline Manifest/lookup test
 ```
 
 The five operations are `CONNECT_PEER`, `REGISTER_REGION`, `FETCH_REGION`,
@@ -73,13 +77,15 @@ hashes.
 
 This PoC has deliberately fixed assumptions:
 
-- x86-64 homogeneous peers and ABI version 1;
+- x86-64 homogeneous peers, kernel descriptor ABI version 1, and lifecycle
+  metadata protocol version 2;
 - exactly one RDMA device visible inside each isolated Guest;
 - RDMA port 1 and IPv4 RoCEv2 GID index 3;
 - one privileged `/dev/slsm` open, one RC session, and one in-flight read at a
   time;
 - 1-8 chunks of at most 1 MiB each, for an 8 MiB maximum SST;
-- a trusted, single-purpose Guest environment.
+- a trusted, single-purpose Guest environment;
+- at most eight in-memory Manifest entries and no persistence.
 
 After an operator has separately loaded the matching module in both Guests,
 the userspace gate can be run with documentation-only addresses as follows:
@@ -98,9 +104,10 @@ the userspace gate can be run with documentation-only addresses as follows:
 Replace the example address with the CN address reachable from the SN. The CN
 requires `--bind`, and the SN requires `--server`. Because `/dev/slsm` exposes
 an unsafe global-rkey research path, both programs require `CAP_SYS_RAWIO`
-(normally root). Success requires a `stage2_result` JSON line with `status` set
-to `pass` from both roles. The lifecycle acknowledgements do not provide
-persistence or an LSM Manifest.
+(normally root). Success requires a `stage3_result` JSON line with `status` set
+to `pass` from both roles. The result includes the Manifest version and the
+metadata used for the lookup check. `make -C slsm-user test` also runs the
+two-SST offline Manifest test.
 
 ## Safety and limitations
 

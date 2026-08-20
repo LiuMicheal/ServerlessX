@@ -16,8 +16,9 @@ _Static_assert(sizeof(struct slsm_register_req) == 216, "unexpected register ABI
 _Static_assert(sizeof(struct slsm_fetch_req) == 232, "unexpected fetch ABI");
 _Static_assert(sizeof(struct slsm_control_message) == 200, "unexpected control ABI");
 _Static_assert(sizeof(struct slsm_control_ack) == 32, "unexpected ack ABI");
-_Static_assert(sizeof(struct slsm_lifecycle_message) == 216, "unexpected lifecycle message ABI");
-_Static_assert(sizeof(struct slsm_lifecycle_ack) == 48, "unexpected lifecycle ack ABI");
+_Static_assert(sizeof(struct slsm_sst_metadata) == 32, "unexpected metadata ABI");
+_Static_assert(sizeof(struct slsm_lifecycle_message) == 248, "unexpected lifecycle message ABI");
+_Static_assert(sizeof(struct slsm_lifecycle_ack) == 64, "unexpected lifecycle ack ABI");
 
 uint64_t slsm_fnv1a(const void *data, size_t length)
 {
@@ -108,6 +109,8 @@ int slsm_parse_u64(const char *text, uint64_t *value)
     char *end = NULL;
     unsigned long long parsed;
 
+    if (text == NULL || text[0] == '-' || text[0] == '+')
+        return -1;
     errno = 0;
     parsed = strtoull(text, &end, 0);
     if (errno != 0 || end == text || *end != '\0')

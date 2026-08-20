@@ -100,6 +100,73 @@ committed. The original hashes remain the only runtime-validated artifacts;
 the hardened hashes establish compilation only until the correctness matrix is
 rerun.
 
+## Minimal SST/epoch/Manifest semantics
+
+The next small-paper layer keeps the kernel descriptor ABI unchanged and adds
+only user-space metadata to the lifecycle message. The wire protocol was
+bumped to lifecycle version 2 because the message and acknowledgement now carry
+the following fields:
+
+```text
+SST metadata = { level, epoch, inclusive min_key, inclusive max_key }
+SN Manifest  = { pending | committed entries, version }
+```
+
+The healthy-session state transition is:
+
+```text
+PUBLISH  -> pending Manifest entry
+FETCH    -> checksum agreement for the descriptor bytes
+COMMIT   -> committed entry visible to epoch/key-range lookup
+REVOKE   -> entry removed; lookup may fall back to another committed entry
+```
+
+The Manifest implementation is deliberately process-local and bounded to eight
+entries. It is metadata routing, not a real key/value lookup: the test payload
+is still a deterministic byte pattern and the lookup checks only the declared
+key range, epoch, and LSM level priority. A standalone test covers two
+overlapping SSTs, pending invisibility, epoch/state checks, L0 priority, and
+fallback after revoke:
+
+```text
+{"event":"manifest_test","status":"pass","entries":2,
+ "lookup_key":75,"final_count":0,"version":6}
+```
+
+A pre-v2 live 1 MiB smoke using the original loaded kernel module exercised the
+new metadata path and produced:
+
+```text
+CN: {"event":"stage3_result","status":"pass","sst_id":4001,
+     "level":0,"epoch":7,"key_range":[4001000,4001999],
+     "manifest_version":3}
+SN: {"event":"stage3_result","status":"pass","sst_id":4001,
+     "manifest_version":3}
+```
+
+The final v2 userspace rebuild was copied to both Guests. A reverse-direction
+8 MiB session then passed with the new wire format:
+
+```text
+CN: {"event":"stage3_result","status":"pass","sst_id":4008,
+     "level":0,"epoch":8,"key_range":[4008000,4008999],
+     "manifest_version":3}
+SN: {"event":"stage3_result","status":"pass","sst_id":4008,
+     "bytes":8388608,"elapsed_us":33116,"manifest_version":3}
+```
+
+The direction was reversed because the inherited CM/RC service does not
+reliably accept a second session after teardown. No module was unloaded and no
+Guest was rebooted.
+
+The final userspace artifact hashes are:
+
+```text
+slsm_cn             f8868cf985496d52975a3b0826728c37ffa40fab16b77805179dd976550acadb
+slsm_sn             9fb2246d2ec32c59001399b3ffd5f400268efd3f5edfd86c6550d39a39b18996
+slsm_manifest_test  3cd0b35afcf6bc93e7b9e9b534f42e3ba7cf7cd96fae3bc9bd3d54a257d6da50
+```
+
 ## Observed warnings
 
 Both module loads emitted the inherited warnings:
@@ -142,12 +209,13 @@ CN userspace buffer
   -> byte-pattern and checksum agreement
 ```
 
-It does not include Nova-LSM, real SST files, storage I/O, compaction, rFork,
-rMMap page faults, persistent epochs, range locks, Manifest publication,
+It does not include Nova-LSM, a real SST key/value format, storage I/O,
+compaction, rFork, rMMap page faults, persistent epochs, range locks,
 persistence, failure recovery, containers, resource elasticity, or a scheduler.
-The new COMMIT and REVOKE messages are protocol acknowledgements only; they do
-not make the fetched bytes durable or implement an LSM Manifest.
+The Manifest is user-space metadata routing only; it is not durable and does
+not provide a full LSM read path.
 
-The next small-paper gate is to rerun this lifecycle with the hardened module
-in a controlled module-lifecycle window, then add only the minimum SST/epoch
-metadata needed for an LSM claim before attempting Nova-LSM integration.
+The next small-paper gate is to replace the deterministic byte pattern with a
+small real SST format and connect one MemTable flush/read path. That is the
+point at which a Nova-LSM-style user-space layout becomes meaningful; full
+Nova-LSM integration and compaction remain later work.

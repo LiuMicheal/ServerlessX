@@ -16,7 +16,9 @@
 
 #define SLSM_CONTROL_MAGIC 0x534c534dU
 #define SLSM_CONTROL_PORT 18515U
-#define SLSM_LIFECYCLE_VERSION 1U
+#define SLSM_LIFECYCLE_VERSION 2U
+#define SLSM_METADATA_VERSION 1U
+#define SLSM_MAX_SST_LEVEL 7U
 
 #define SLSM_PHASE_PUBLISH 1U
 #define SLSM_PHASE_FETCH 2U
@@ -79,6 +81,16 @@ struct slsm_control_ack {
     uint64_t elapsed_us;
 };
 
+/* User-space LSM metadata; the kernel descriptor ABI stays unchanged. */
+struct slsm_sst_metadata {
+    uint32_t version;
+    uint16_t level;
+    uint16_t reserved;
+    uint64_t epoch;
+    uint64_t min_key;
+    uint64_t max_key;
+};
+
 struct slsm_lifecycle_message {
     uint32_t magic;
     uint32_t version;
@@ -86,6 +98,7 @@ struct slsm_lifecycle_message {
     uint32_t reserved;
     uint64_t generation;
     struct slsm_sst_descriptor descriptor;
+    struct slsm_sst_metadata metadata;
 };
 
 struct slsm_lifecycle_ack {
@@ -97,6 +110,8 @@ struct slsm_lifecycle_ack {
     uint64_t fetched_length;
     uint64_t checksum;
     uint64_t elapsed_us;
+    uint64_t manifest_version;
+    uint64_t lookup_sst_id;
 };
 
 #endif
