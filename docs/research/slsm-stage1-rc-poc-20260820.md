@@ -178,6 +178,36 @@ Raw logs, internal addresses, credentials, VM definitions, modules, and
 executables remain outside this repository. No host or Guest reboot is part of
 the recorded gate.
 
+## Nova-compatible SST adapter (offline follow-up)
+
+The Nova-LSM format audit used a direct clone of
+`https://github.com/HaoyuHuang/NovaLSM` at commit
+`8a661197ce5b993f2baeef608f34192d1ef0adf5` (2021-06-20). The complete Nova
+database was not copied into this repository and is not linked into the small C
+prototype because its DB API depends on Nova configuration, remote storage,
+RDMA, Manifest, and compaction services.
+
+The external Mitosis worktree now contains a dependency-free, clean-room
+adapter for the format semantics used by Nova's LevelDB-derived table reader:
+internal keys, prefix-compressed data blocks, restart metadata, index and empty
+metaindex blocks, masked CRC32C trailers, the 48-byte footer, and snapshot-aware
+point lookup. It wraps that payload in the existing SLSM header, so the kernel
+descriptor ABI and `PUBLISH -> FETCH -> COMMIT -> REVOKE` lifecycle are
+unchanged.
+
+The adapter's offline tests passed (four entries including two sequence
+versions, CRC corruption rejection, and outer SLSM lookup):
+
+```text
+{"event":"nova_sst_test","status":"pass","entries":4,"bytes":167,"lookup_sequence":2}
+{"event":"sst_test","status":"pass","format":"nova-leveldb-table","records":3,"bytes":231,"lookup_key":20,"lookup_value":222}
+```
+
+This demonstrates Nova-compatible SST/lookup semantics over the existing SLSM
+data path; it does not reproduce Nova's full DB, storage service, compaction,
+or performance behavior. These results are source-build/offline only: no
+Guest session, module load, Host reboot, or physical RNIC operation was used.
+
 ## Next gate
 
 Measure repeated small-SST workloads and then decide whether a small

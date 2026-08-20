@@ -69,6 +69,18 @@
       "bundled": false,
       "status": "optional_reference",
       "notes": "The portable CPU path does not require Mooncake. Historical GDR experiments used additional pinned revisions and patches outside this bootstrap."
+    },
+    {
+      "id": "novalsm",
+      "upstream": "https://github.com/HaoyuHuang/NovaLSM.git",
+      "revision": "8a661197ce5b993f2baeef608f34192d1ef0adf5",
+      "revision_kind": "format_audit_reference",
+      "declared_license": "BSD-3-Clause (LevelDB-derived repository license observed)",
+      "license_confidence": "high",
+      "license_basis": "Repository-root LICENSE was present at the audited revision.",
+      "bundled": false,
+      "status": "reference_only",
+      "notes": "Only internal-key and LevelDB/Nova table-format semantics were audited. No Nova source, build artifact, storage service, or compaction code is bundled."
     }
   ]
 }
