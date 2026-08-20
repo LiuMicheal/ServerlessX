@@ -274,6 +274,16 @@ Offline verification from `slsm-user/`:
 {"event":"nova_sst_test","status":"pass","entries":4,"bytes":167,"lookup_sequence":2}
 ```
 
+The new user-space binaries were compile-only artifacts; their SHA-256 values
+are recorded here for reproducibility:
+
+```text
+slsm_cn             17889db1eaf64c525551099d91b6ece9ca6abbb5886d99a8c32701372e709e5b
+slsm_sn             7b708b60c7a6eb6bb80c8cc7ce4411e48e3d0d2e5f8ed13e5c74d984ea3408bf
+slsm_sst_test       c8cbd23b6a13129edfc9cabfa5cf0021f8360e496ec52946438cd9c10b6345aa
+slsm_nova_sst_test  917a83026deb7323be5aac185f85841edb04aad4d9f8857a2ffbb3be8dd088aa
+```
+
 These are source-build/offline results. No Guest session, module load, Host
 reboot, or physical RNIC operation was performed for this adapter change.
 
