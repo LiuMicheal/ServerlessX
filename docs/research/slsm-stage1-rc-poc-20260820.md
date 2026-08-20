@@ -128,6 +128,29 @@ slsm_sn             9fb2246d2ec32c59001399b3ffd5f400268efd3f5edfd86c6550d39a39b1
 slsm_manifest_test  3cd0b35afcf6bc93e7b9e9b534f42e3ba7cf7cd96fae3bc9bd3d54a257d6da50
 ```
 
+## Stage 4: real SST and MemTable flush/read
+
+The external prototype then replaced the deterministic byte pattern with a
+small in-memory SST format without changing the kernel descriptor or RDMA ABI.
+The format uses a fixed header and sorted `uint64_t` key/value records, bounded
+to 32 records. CN fills a sorted MemTable and flushes it to an SST before
+registering the exact encoded length. SN validates the SST header, ID, epoch,
+range, and ordering, then performs one binary-search point lookup after the
+RDMA READ. The existing `PUBLISH -> FETCH -> COMMIT -> REVOKE` lifecycle is
+unchanged.
+
+The standalone Manifest and SST tests passed. Two single-session Guest checks
+also passed: one with eight records (184 bytes, SN observation `9 us`) and one
+with five records (136 bytes, SN observation `8 us`). Checksums agreed in both
+directions, and both point lookups returned the expected values. These are
+correctness-run observations, not performance measurements. No module was
+replaced or unloaded, and no host or Guest was rebooted.
+
+This adds one real user-space MemTable flush/read path to the external evidence,
+but it remains process-local and in-memory. It is not a durable Nova-LSM,
+storage benchmark, compaction implementation, or end-to-end ServerlessLSM
+system.
+
 The original module loads emitted inherited return-thunk and unsafe-global-rkey
 warnings. No Oops, BUG, panic, or test failure followed during this gate. The
 physical-address descriptors and global-rkey path still restrict the prototype
@@ -135,21 +158,21 @@ to isolated research Guests.
 
 ## Claim boundary
 
-The evidence establishes only this chain:
+The combined evidence establishes only this chain:
 
 ```text
 CN userspace buffer
   -> kernel-owned chunk regions and descriptor
   -> one RC connection
   -> SN one-sided RDMA READ
-  -> checksum agreement
+  -> real SST validation, checksum agreement, and one point lookup
 ```
 
-It does not include Nova-LSM, a real SST key/value format, storage I/O, flush,
-compaction, RDMA mmap page faults, persistent epochs, range locks, durable
-Manifest publication, persistence, recovery, function lifecycle,
-multi-tenancy, elasticity, or a scheduler. The user-space Manifest is metadata
-routing only and does not provide a complete LSM read path.
+It does not include Nova-LSM, storage I/O, compaction, RDMA mmap page faults,
+persistent epochs, range locks, durable Manifest publication, persistence,
+recovery, function lifecycle, multi-tenancy, elasticity, or a scheduler. The
+SST and Manifest are user-space and process-local, so this is not a complete
+durable LSM read path.
 
 Raw logs, internal addresses, credentials, VM definitions, modules, and
 executables remain outside this repository. No host or Guest reboot is part of
@@ -157,8 +180,6 @@ the recorded gate.
 
 ## Next gate
 
-Load the compile-verified hardened source in the isolated test Guests and rerun
-the transport and lifecycle matrices in a controlled module-lifecycle window.
-The next functional step is a small real SST format with one MemTable
-flush/read path; that is the appropriate point for a Nova-LSM-style user-space
-integration. Performance work remains a later stage.
+Measure repeated small-SST workloads and then decide whether a small
+Nova-LSM-style read API is needed. Full Nova-LSM integration, persistence, and
+compaction remain later work.

@@ -31,17 +31,18 @@ visible source preview and retain the licensing warning.
 | PhOS backend | No; identity record only | Historical controlled-lab context | External, separately supplied research backend |
 | Wiseswap | Status page only | No implementation or profile | Research lineage and roadmap only |
 | ServerlessRec | Status page only | No implementation or profile | RDMA Map research lineage and roadmap only |
-| ServerlessLSM | No; external prototype only | Sanitized note records the two-Guest RC SST-fetch gate plus a user-space level/epoch/key-range Manifest follow-up; final metadata clients compile-verified, no bundled module or profile | Metadata-routing mechanism evidence only; no real SST reader, runnable profile, performance, or end-to-end LSM claim |
+| ServerlessLSM | No; external prototype only | Sanitized note records the two-Guest RC SST-fetch gate, user-space Manifest, and one real in-memory SST/MemTable flush-read gate; no bundled module or profile | External mechanism and one-MemTable correctness evidence only; no performance or end-to-end LSM claim |
 
 The performance numbers reported in the Wiseswap, ServerlessPD, ServerlessRec,
 and ServerlessLSM papers are research results. They are not automatically
 reproduced by the current GitHub quickstart.
 
 The [SLSM Stage 1 note](research/slsm-stage1-rc-poc-20260820.md) records
-external evidence only. Its follow-up Manifest is a process-local metadata
-test, not a bundled SLSM implementation or executable profile. The original
-kernel artifact remains the runtime-validated transport result; later hardened
-and metadata clients are separately compile-verified.
+external evidence only. Its Manifest and real-SST follow-up are process-local
+user-space correctness checks, not a bundled SLSM implementation or executable
+profile. The original kernel artifact remains the runtime-validated transport
+result; later clients are separately compile-verified and the added SST path is
+not a performance result.
 
 ## What a new user can run
 
