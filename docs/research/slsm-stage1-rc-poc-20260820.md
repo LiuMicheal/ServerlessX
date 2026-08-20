@@ -199,7 +199,7 @@ The adapter's offline tests passed (four entries including two sequence
 versions, CRC corruption rejection, and outer SLSM lookup):
 
 ```text
-{"event":"nova_sst_test","status":"pass","entries":4,"bytes":167,"lookup_sequence":2}
+{"event":"nova_sst_test","status":"pass","entries":32,"bytes":767,"lookup_sequence":2}
 {"event":"sst_test","status":"pass","format":"nova-leveldb-table","records":3,"bytes":231,"lookup_key":20,"lookup_value":222}
 ```
 
