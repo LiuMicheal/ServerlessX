@@ -16,6 +16,8 @@ _Static_assert(sizeof(struct slsm_register_req) == 216, "unexpected register ABI
 _Static_assert(sizeof(struct slsm_fetch_req) == 232, "unexpected fetch ABI");
 _Static_assert(sizeof(struct slsm_control_message) == 200, "unexpected control ABI");
 _Static_assert(sizeof(struct slsm_control_ack) == 32, "unexpected ack ABI");
+_Static_assert(sizeof(struct slsm_lifecycle_message) == 216, "unexpected lifecycle message ABI");
+_Static_assert(sizeof(struct slsm_lifecycle_ack) == 48, "unexpected lifecycle ack ABI");
 
 uint64_t slsm_fnv1a(const void *data, size_t length)
 {

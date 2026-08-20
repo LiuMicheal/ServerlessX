@@ -16,6 +16,12 @@
 
 #define SLSM_CONTROL_MAGIC 0x534c534dU
 #define SLSM_CONTROL_PORT 18515U
+#define SLSM_LIFECYCLE_VERSION 1U
+
+#define SLSM_PHASE_PUBLISH 1U
+#define SLSM_PHASE_FETCH 2U
+#define SLSM_PHASE_COMMIT 3U
+#define SLSM_PHASE_REVOKE 4U
 
 struct slsm_remote_chunk {
     uint64_t remote_addr;
@@ -68,6 +74,26 @@ struct slsm_control_message {
 struct slsm_control_ack {
     uint32_t magic;
     int32_t status;
+    uint64_t fetched_length;
+    uint64_t checksum;
+    uint64_t elapsed_us;
+};
+
+struct slsm_lifecycle_message {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t phase;
+    uint32_t reserved;
+    uint64_t generation;
+    struct slsm_sst_descriptor descriptor;
+};
+
+struct slsm_lifecycle_ack {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t phase;
+    int32_t status;
+    uint64_t generation;
     uint64_t fetched_length;
     uint64_t checksum;
     uint64_t elapsed_us;

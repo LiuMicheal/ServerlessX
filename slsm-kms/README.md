@@ -20,7 +20,8 @@ lifecycle management, or scheduling.
 4. The SN asks its local `slsm.ko` to create one RC connection and fetch each
    chunk with RDMA READ.
 5. Kernel and userspace independently verify an FNV-1a checksum and the SN
-   returns an acknowledgement to the CN.
+   returns a FETCH acknowledgement to the CN.
+6. The CN and SN complete the control-only `COMMIT` and `REVOKE` phases.
 
 The control channel carries metadata only. SST bytes move through RDMA.
 
@@ -97,8 +98,9 @@ the userspace gate can be run with documentation-only addresses as follows:
 Replace the example address with the CN address reachable from the SN. The CN
 requires `--bind`, and the SN requires `--server`. Because `/dev/slsm` exposes
 an unsafe global-rkey research path, both programs require `CAP_SYS_RAWIO`
-(normally root). Success requires a `stage1_result` JSON line with `status` set
-to `pass` from both roles.
+(normally root). Success requires a `stage2_result` JSON line with `status` set
+to `pass` from both roles. The lifecycle acknowledgements do not provide
+persistence or an LSM Manifest.
 
 ## Safety and limitations
 

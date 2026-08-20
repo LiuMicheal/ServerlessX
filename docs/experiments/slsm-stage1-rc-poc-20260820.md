@@ -50,6 +50,40 @@ slsm_cn  eb4a75067acae5ecec294218e03672e2e422c9d6203a5144da4173d4c9dc0ca3
 slsm_sn  7dcb7d1cd27372e9b5d5afbeb892531949b048558d3efaf6465620b4df1b77d1
 ```
 
+## Minimal lifecycle validation
+
+The follow-up userspace control protocol added a deliberately small lifecycle:
+
+```text
+PUBLISH -> FETCH -> COMMIT -> REVOKE
+```
+
+The new userspace clients were run with the original runtime-validated module
+(`ec467eb6...`) still loaded in both Guests. The lifecycle change is control
+plane only; it uses the existing register, RC connect, RDMA READ, disconnect,
+and unregister ioctls. The clients were run with `CAP_SYS_RAWIO` inside the
+isolated Guests.
+
+| Direction | Payload | SST ID | Chunks | FNV-1a checksum | SN fetch time | Result |
+| --- | ---: | ---: | ---: | --- | ---: | --- |
+| mem01 CN -> mem02 SN | 1 MiB | 2001 | 1 | `0xb6eae9c0f46aa325` | 5,770 us | lifecycle pass |
+| mem02 CN -> mem01 SN | 8 MiB | 3008 | 8 | `0x9ccbaf967e662325` | 32,947 us | lifecycle pass |
+
+The lifecycle clients were:
+
+```text
+slsm_cn  32df61f4ac8976e131208308f51e6681833ed0dc2b25d2800b1424e5cae3cc24
+slsm_sn  d6a31bbaf5aa91fde60ce3c16e2185cbb99aa0eb2815e291d89bacc529b8b886
+```
+
+An additional 8 MiB attempt in the original mem01-CN/mem02-SN direction was
+rejected at `CONNECT_PEER` with `ECONNREFUSED` after the first lifecycle run.
+The inherited CM/RC implementation does not reliably accept a second session
+after teardown without a module lifecycle reset. We did not unload a module or
+reboot a Guest to force that reset. The reverse-direction pass therefore
+demonstrates the multi-chunk lifecycle contract, but is not a directional
+performance comparison.
+
 The review-hardened source was subsequently compiled, without loading the
 module or running either Guest. Its compile-only artifacts are:
 
@@ -85,12 +119,12 @@ does not free a posted DMA target on a local timeout.
 
 ## Final state
 
-For the original validation, the two test processes exited and no control
-listener remained. Both test Guests kept the original `slsm.ko` loaded with
-module reference count zero. The modules were not unloaded because the
-inherited RC/CM server teardown can race retained sessions. The later
-compile-only build Guest did not load the hardened module. Neither physical
-host nor Guest was rebooted for either operation.
+For both validation passes, the test processes exited and no control listener
+remained. Both test Guests kept the original `slsm.ko` loaded with module
+reference count zero. The modules were not unloaded because the inherited
+RC/CM server teardown can race retained sessions and does not reliably support
+a second session. The later compile-only build Guest did not load the hardened
+module. Neither physical host nor Guest was rebooted for either operation.
 
 No active RDMA discovery or transfer was run on a physical host. Raw logs,
 internal addresses, VM definitions, credentials, binaries, and private machine
@@ -109,8 +143,11 @@ CN userspace buffer
 ```
 
 It does not include Nova-LSM, real SST files, storage I/O, compaction, rFork,
-rMMap page faults, epochs, range locks, Manifest publication, persistence,
-failure recovery, containers, resource elasticity, or a scheduler.
+rMMap page faults, persistent epochs, range locks, Manifest publication,
+persistence, failure recovery, containers, resource elasticity, or a scheduler.
+The new COMMIT and REVOKE messages are protocol acknowledgements only; they do
+not make the fetched bytes durable or implement an LSM Manifest.
 
-The next small-paper gate should add a minimal SST/epoch lifecycle on top of
-this fixed transport contract before attempting Nova-LSM integration.
+The next small-paper gate is to rerun this lifecycle with the hardened module
+in a controlled module-lifecycle window, then add only the minimum SST/epoch
+metadata needed for an LSM claim before attempting Nova-LSM integration.

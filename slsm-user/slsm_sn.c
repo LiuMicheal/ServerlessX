@@ -59,8 +59,12 @@ int main(int argc, char **argv)
     const char *device = DEFAULT_DEVICE;
     const char *server_address = NULL;
     uint16_t port = SLSM_CONTROL_PORT;
-    struct slsm_control_message message = {0};
-    struct slsm_control_ack ack = {.magic = SLSM_CONTROL_MAGIC};
+    struct slsm_lifecycle_message message = {0};
+    struct slsm_lifecycle_message next = {0};
+    struct slsm_lifecycle_ack ack = {
+        .magic = SLSM_CONTROL_MAGIC,
+        .version = SLSM_LIFECYCLE_VERSION,
+    };
     struct slsm_connect_req connect_request = {0};
     struct slsm_fetch_req fetch_request = {0};
     uint64_t userspace_checksum = 0;
@@ -98,14 +102,18 @@ int main(int argc, char **argv)
         goto out;
     }
     if (slsm_read_full(control_fd, &message, sizeof(message)) != 0) {
-        perror("read descriptor");
+        perror("read PUBLISH");
         goto send_ack;
     }
-    if (message.magic != SLSM_CONTROL_MAGIC || message.version != SLSM_ABI_VERSION ||
+    ack.phase = SLSM_PHASE_PUBLISH;
+    ack.generation = message.generation;
+    if (message.magic != SLSM_CONTROL_MAGIC ||
+        message.version != SLSM_LIFECYCLE_VERSION ||
+        message.phase != SLSM_PHASE_PUBLISH ||
         message.descriptor.version != SLSM_ABI_VERSION ||
         message.descriptor.total_length == 0 ||
         message.descriptor.total_length > SLSM_MAX_SST_SIZE) {
-        fprintf(stderr, "invalid descriptor from CN\n");
+        fprintf(stderr, "invalid PUBLISH from CN\n");
         ack.status = -EINVAL;
         goto send_ack;
     }
@@ -137,11 +145,13 @@ int main(int argc, char **argv)
     fetch_request.descriptor = message.descriptor;
     if (ioctl(device_fd, SLSM_IOCTL_FETCH_REGION, &fetch_request) != 0) {
         perror("SLSM_IOCTL_FETCH_REGION");
+        ack.phase = SLSM_PHASE_FETCH;
+        ack.generation = message.generation;
         ack.status = -errno;
         ack.fetched_length = fetch_request.fetched_length;
         ack.checksum = fetch_request.checksum;
         ack.elapsed_us = fetch_request.elapsed_us;
-        goto disconnect;
+        goto disconnect_send_ack;
     }
     userspace_checksum = slsm_fnv1a(buffer, (size_t)fetch_request.fetched_length);
     if (fetch_request.fetched_length != message.descriptor.total_length ||
@@ -150,13 +160,75 @@ int main(int argc, char **argv)
         slsm_check_sst(buffer, (size_t)fetch_request.fetched_length,
                        message.descriptor.sst_id) != 0) {
         fprintf(stderr, "SST validation failed after RDMA READ\n");
+        ack.phase = SLSM_PHASE_FETCH;
+        ack.generation = message.generation;
         ack.status = -EBADMSG;
-        goto disconnect;
+        goto disconnect_send_ack;
     }
+    ack.phase = SLSM_PHASE_FETCH;
+    ack.generation = message.generation;
     ack.status = 0;
     ack.fetched_length = fetch_request.fetched_length;
     ack.checksum = userspace_checksum;
     ack.elapsed_us = fetch_request.elapsed_us;
+    if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
+        perror("write FETCH ack");
+        goto disconnect;
+    }
+
+    if (slsm_read_full(control_fd, &next, sizeof(next)) != 0) {
+        perror("read COMMIT");
+        goto disconnect;
+    }
+    ack = (struct slsm_lifecycle_ack){
+        .magic = SLSM_CONTROL_MAGIC,
+        .version = SLSM_LIFECYCLE_VERSION,
+        .phase = SLSM_PHASE_COMMIT,
+        .generation = message.generation,
+    };
+    if (next.magic != SLSM_CONTROL_MAGIC ||
+        next.version != SLSM_LIFECYCLE_VERSION ||
+        next.phase != SLSM_PHASE_COMMIT ||
+        next.generation != message.generation ||
+        memcmp(&next.descriptor, &message.descriptor, sizeof(next.descriptor)) != 0) {
+        fprintf(stderr, "invalid COMMIT for generation=%" PRIu64 "\n", message.generation);
+        ack.status = -EPROTO;
+        if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0)
+            result = EXIT_FAILURE;
+        goto disconnect;
+    }
+    ack.status = 0;
+    if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
+        perror("write COMMIT ack");
+        goto disconnect;
+    }
+
+    if (slsm_read_full(control_fd, &next, sizeof(next)) != 0) {
+        perror("read REVOKE");
+        goto disconnect;
+    }
+    ack = (struct slsm_lifecycle_ack){
+        .magic = SLSM_CONTROL_MAGIC,
+        .version = SLSM_LIFECYCLE_VERSION,
+        .phase = SLSM_PHASE_REVOKE,
+        .generation = message.generation,
+    };
+    if (next.magic != SLSM_CONTROL_MAGIC ||
+        next.version != SLSM_LIFECYCLE_VERSION ||
+        next.phase != SLSM_PHASE_REVOKE ||
+        next.generation != message.generation ||
+        memcmp(&next.descriptor, &message.descriptor, sizeof(next.descriptor)) != 0) {
+        fprintf(stderr, "invalid REVOKE for generation=%" PRIu64 "\n", message.generation);
+        ack.status = -EPROTO;
+        if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0)
+            result = EXIT_FAILURE;
+        goto disconnect;
+    }
+    ack.status = 0;
+    if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
+        perror("write REVOKE ack");
+        goto disconnect;
+    }
     result = EXIT_SUCCESS;
 
 disconnect:
@@ -165,15 +237,25 @@ disconnect:
         ack.status = -errno;
         result = EXIT_FAILURE;
     }
+    goto print_result;
+
+disconnect_send_ack:
+    if (connected && ioctl(device_fd, SLSM_IOCTL_DISCONNECT, 0) != 0) {
+        perror("SLSM_IOCTL_DISCONNECT");
+        result = EXIT_FAILURE;
+    }
 send_ack:
     if (control_fd >= 0 && slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
         perror("write result ack");
         result = EXIT_FAILURE;
     }
+print_result:
     if (result == EXIT_SUCCESS) {
-        printf("{\"event\":\"stage1_result\",\"role\":\"sn\",\"status\":\"pass\","
-               "\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
+        printf("{\"event\":\"stage2_result\",\"role\":\"sn\",\"status\":\"pass\","
+               "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
+               ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
                "\"checksum\":\"0x%016" PRIx64 "\",\"elapsed_us\":%" PRIu64 "}\n",
+               message.generation,
                message.descriptor.sst_id, fetch_request.fetched_length,
                message.descriptor.chunk_count, userspace_checksum, fetch_request.elapsed_us);
     }

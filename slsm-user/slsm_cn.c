@@ -67,10 +67,11 @@ int main(int argc, char **argv)
     uint64_t size = SLSM_MAX_SST_SIZE;
     uint64_t sst_id = 1;
     struct slsm_register_req request = {0};
-    struct slsm_control_message message = {0};
-    struct slsm_control_ack ack = {0};
+    struct slsm_lifecycle_message message = {0};
+    struct slsm_lifecycle_ack ack = {0};
     struct pollfd poll_fd;
     uint64_t userspace_checksum;
+    uint64_t fetch_elapsed_us = 0;
     void *buffer = NULL;
     int device_fd = -1;
     int listener_fd = -1;
@@ -161,25 +162,62 @@ int main(int argc, char **argv)
         goto unregister;
     }
     message.magic = SLSM_CONTROL_MAGIC;
-    message.version = SLSM_ABI_VERSION;
+    message.version = SLSM_LIFECYCLE_VERSION;
+    message.phase = SLSM_PHASE_PUBLISH;
+    message.generation = 1;
     message.descriptor = request.descriptor;
     if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
         slsm_read_full(client_fd, &ack, sizeof(ack)) != 0) {
-        perror("descriptor exchange");
+        perror("publish exchange");
         goto unregister;
     }
-    if (ack.magic != SLSM_CONTROL_MAGIC || ack.status != 0 ||
+    if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
+        ack.phase != SLSM_PHASE_FETCH || ack.generation != message.generation ||
+        ack.status != 0 ||
         ack.fetched_length != size || ack.checksum != userspace_checksum) {
         fprintf(stderr,
-                "SN rejected SST: status=%d bytes=%" PRIu64 " checksum=0x%016" PRIx64 "\n",
+                "SN rejected FETCH: status=%d bytes=%" PRIu64 " checksum=0x%016" PRIx64 "\n",
                 ack.status, ack.fetched_length, ack.checksum);
         goto unregister;
     }
+    fetch_elapsed_us = ack.elapsed_us;
 
-    printf("{\"event\":\"stage1_result\",\"role\":\"cn\",\"status\":\"pass\","
-           "\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
+    message.phase = SLSM_PHASE_COMMIT;
+    ack = (struct slsm_lifecycle_ack){0};
+    if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
+        slsm_read_full(client_fd, &ack, sizeof(ack)) != 0) {
+        perror("commit exchange");
+        goto unregister;
+    }
+    if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
+        ack.phase != SLSM_PHASE_COMMIT || ack.generation != message.generation ||
+        ack.status != 0) {
+        fprintf(stderr, "SN rejected COMMIT: status=%d generation=%" PRIu64 "\n",
+                ack.status, ack.generation);
+        goto unregister;
+    }
+
+    message.phase = SLSM_PHASE_REVOKE;
+    ack = (struct slsm_lifecycle_ack){0};
+    if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
+        slsm_read_full(client_fd, &ack, sizeof(ack)) != 0) {
+        perror("revoke exchange");
+        goto unregister;
+    }
+    if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
+        ack.phase != SLSM_PHASE_REVOKE || ack.generation != message.generation ||
+        ack.status != 0) {
+        fprintf(stderr, "SN rejected REVOKE: status=%d generation=%" PRIu64 "\n",
+                ack.status, ack.generation);
+        goto unregister;
+    }
+
+    printf("{\"event\":\"stage2_result\",\"role\":\"cn\",\"status\":\"pass\","
+           "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
+           ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
            "\"checksum\":\"0x%016" PRIx64 "\",\"sn_elapsed_us\":%" PRIu64 "}\n",
-           sst_id, size, request.descriptor.chunk_count, userspace_checksum, ack.elapsed_us);
+           message.generation, sst_id, size, request.descriptor.chunk_count,
+           userspace_checksum, fetch_elapsed_us);
     result = EXIT_SUCCESS;
 
 unregister:
