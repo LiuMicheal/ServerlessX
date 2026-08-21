@@ -105,6 +105,21 @@ Start mem02 (`server_id=1`, `enable_load_data=false`) before mem01
 both processes for the LTC run, then use fresh directories and set it to `sc`
 on both processes for the StoC run.
 
+## Why both modes are SLSM baselines
+
+- Nova-LSM `lc` is the local-compaction baseline. Comparing SLSM with `lc`
+  measures the benefit of removing compaction work from the CN.
+- Nova-LSM `sc` is the static remote-compaction baseline. Comparing SLSM with
+  `sc` isolates the additional value and overhead of creating compaction
+  workers on demand instead of keeping a StoC worker resident.
+
+Without `sc`, an improvement over `lc` could be explained entirely by using a
+second machine rather than by Serverless execution. Without `lc`, the study
+cannot show whether remote compaction actually reduces interference on the
+foreground CN. The minimal comparison is therefore `lc` versus `sc` versus
+SLSM: local execution, resident remote execution, and on-demand remote
+execution.
+
 ## Local fixes kept in this branch
 
 - select the IPv4 RoCE GID instead of assuming GID index zero;
@@ -122,6 +137,38 @@ Fresh two-node runs with `enable_lookup_index=true` or
 `Complete Load` result could be established. They produced no non-zero SST
 evidence. These switches remain follow-up work and are deliberately not
 presented as verified results in this small-paper baseline.
+
+## Guest-only profiling run (2026-08-22)
+
+The minimal profiler is `scripts/exp/nova_compaction_profile.sh`. It ran three
+fresh trials of each mode in the two SLSM Guests. The workload and Nova flags
+were unchanged from the functional compaction checks. Each trial used a fresh
+database/StoC directory and a fresh Guest control-port pair; the formal run
+used TCP base `14000` and RDMA base `23000` to avoid reusing ports in
+`TIME_WAIT`.
+
+| mode | trial | wall (ms) | major jobs | input files | output files | compaction (us) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| lc | 1 | 17878 | 10 | 20 | 19 | 129495 |
+| lc | 2 | 17873 | 10 | 20 | 19 | 156345 |
+| lc | 3 | 17746 | 10 | 20 | 19 | 188451 |
+| sc | 1 | 17889 | 10 | 20 | 19 | 140208 |
+| sc | 2 | 17845 | 10 | 20 | 19 | 148709 |
+| sc | 3 | 17919 | 10 | 20 | 19 | 153008 |
+
+The mean wall time was `17832 +/- 75 ms` for `lc` and `17884 +/- 37 ms` for
+`sc` (sample standard deviation). Mean compaction time was `158097 +/- 29517
+us` for `lc` and `147308 +/- 6514 us` for `sc`. Every trial loaded two rounds,
+processed 20 input files (`21029324` bytes), produced 19 output files
+(`10515733` bytes), and ended with zero L0 files and 19 L1 files.
+
+The wrapper also collected CPU time, non-loopback Guest network counters, and
+Guest block-device sector deltas from `/proc`. These counters are supporting
+diagnostics rather than isolated RDMA measurements: network totals include
+both `mgmt0` and `rdma0`, and `--use_local_disk=false` means the DB data path is
+not a local-disk benchmark. The raw CSV for this run was
+`/tmp/nova-compaction-profile-20260821-final2/results.csv` on the orchestrator.
+The earlier smoke/retry runs are excluded from the table.
 
 ## Reproduction command shape
 
