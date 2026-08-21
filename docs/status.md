@@ -29,7 +29,7 @@ visible source preview and retain the licensing warning.
 | rfork userspace runtime | C source and tests | Injected-I/O unit tests | Checked userspace ABI; no bundled kernel module |
 | Mitosis and PhOS backends | No; identity records only | Historical controlled-lab context | External, separately supplied research backends |
 | Wiseswap | Status page only | No implementation or profile | Research lineage and roadmap only |
-| ServerlessRec | Status page only | No implementation or profile | RDMA Map research lineage and roadmap only |
+| ServerlessRec | Status page plus external lab note | External one-shot RC smoke; no implementation or profile | RDMA Map research lineage and roadmap; no ServerlessX runtime claim |
 | ServerlessLSM | Status page only | No implementation or profile | RDMA mmap research lineage and roadmap only |
 
 The performance numbers reported in the Wiseswap, ServerlessPD, ServerlessRec,
