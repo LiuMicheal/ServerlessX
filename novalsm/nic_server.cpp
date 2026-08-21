@@ -203,7 +203,7 @@ namespace nova {
         gettimeofday(&start, nullptr);
 
         uint64_t puts = 0;
-        int iter = 1;
+        int iter = NovaConfig::config->load_rounds;
 //        if (NovaConfig::config->num_mem_partitions == 1) {
 //            iter = 1;
 //        }

@@ -166,6 +166,7 @@ namespace nova {
         }
 
         bool enable_load_data = false;
+        uint32_t load_rounds = 1;
         bool enable_rdma = false;
         bool use_ordered_flush = false;
 

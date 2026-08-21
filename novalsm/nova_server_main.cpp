@@ -42,6 +42,7 @@ DEFINE_uint64(rdma_max_num_sends, 0,
 DEFINE_uint64(rdma_doorbell_batch_size, 0, "The doorbell batch size.");
 DEFINE_bool(enable_rdma, false, "Enable RDMA.");
 DEFINE_bool(enable_load_data, false, "Enable loading data.");
+DEFINE_uint32(load_rounds, 1, "Number of times to load each configured key range.");
 
 DEFINE_string(ltc_config_path, "/tmp/uniform-3-32-10000000-frags.txt",
               "The path that stores the configuration.");
@@ -207,6 +208,7 @@ int main(int argc, char *argv[]) {
     NovaConfig::config->db_path = FLAGS_db_path;
     NovaConfig::config->enable_rdma = FLAGS_enable_rdma;
     NovaConfig::config->enable_load_data = FLAGS_enable_load_data;
+    NovaConfig::config->load_rounds = FLAGS_load_rounds;
     NovaConfig::config->major_compaction_type = FLAGS_major_compaction_type;
     NovaConfig::config->enable_flush_multiple_memtables = FLAGS_enable_flush_multiple_memtables;
     NovaConfig::config->major_compaction_max_parallism = FLAGS_major_compaction_max_parallism;
