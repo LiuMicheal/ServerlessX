@@ -277,11 +277,39 @@ namespace nova {
         if (opcode == IBV_WC_SEND) {
             return true;
         }
-        bool processed_by_client = stoc_client_->OnRecv(opcode, wr_id, remote_server_id, buf, imm_data, nullptr);
-        bool processed_by_server = rdma_server_->ProcessRDMAWC(opcode, wr_id, remote_server_id, buf, imm_data, nullptr);
+        bool processed_by_client = false;
+        bool processed_by_server = false;
+
+        // The same wire tag is used for a few request/response pairs (notably
+        // STOC_READ_BLOCKS).  Pick the handler that owns the local role first
+        // and only fall back to the other handler when it did not consume the
+        // completion.
+        const bool local_is_stoc =
+                NovaConfig::config->cfgs[0]->IsStoC();
+        if (local_is_stoc) {
+            processed_by_server = rdma_server_->ProcessRDMAWC(
+                    opcode, wr_id, remote_server_id, buf, imm_data, nullptr);
+            if (!processed_by_server) {
+                processed_by_client = stoc_client_->OnRecv(
+                        opcode, wr_id, remote_server_id, buf, imm_data, nullptr);
+            }
+        } else {
+            processed_by_client = stoc_client_->OnRecv(
+                    opcode, wr_id, remote_server_id, buf, imm_data, nullptr);
+            if (!processed_by_client) {
+                processed_by_server = rdma_server_->ProcessRDMAWC(
+                        opcode, wr_id, remote_server_id, buf, imm_data, nullptr);
+            }
+        }
         if (processed_by_client && processed_by_server) {
+            NOVA_LOG(DEBUG) << fmt::format(
+                    "RDMA completion handled twice opcode:{} wr_id:{} remote:{} imm:{} first:{} client:{} server:{}",
+                    static_cast<int>(opcode), wr_id, remote_server_id, imm_data,
+                    buf ? static_cast<int>(static_cast<unsigned char>(buf[0])) : -1,
+                    processed_by_client, processed_by_server);
             NOVA_ASSERT(false)
                 << fmt::format("Processed by both client and server");
         }
+        return processed_by_client || processed_by_server;
     }
 }

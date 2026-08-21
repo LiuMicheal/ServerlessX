@@ -97,6 +97,7 @@ namespace rdmaio {
             int num_devices;
             int rc;  // return code
             ibv_port_attr port_attr = {};
+            uint16_t gid_index = 0;
 
             dev_list = ibv_get_device_list(&num_devices);
 
@@ -140,10 +141,29 @@ namespace rdmaio {
             NOVA_LOG(INFO) << "mtu " << port_attr.active_mtu << ":"
                            << port_attr.max_mtu << ":" << port_attr.lid;
 
+            // RoCE guests commonly expose link-local GIDs at index 0/1 and
+            // the IPv4-mapped GID used by the RDMA interface at a later
+            // index.  The old default of zero lets the TCP control plane
+            // connect while sending RDMA traffic over the wrong GID.
+            if (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET) {
+                for (uint32_t i = 0; i < port_attr.gid_tbl_len; ++i) {
+                    ibv_gid gid = {};
+                    if (ibv_query_gid(ib_ctx, idx.port_id, i, &gid) != 0) {
+                        continue;
+                    }
+                    if (gid.global.subnet_prefix == 0 &&
+                        gid.global.interface_id != 0) {
+                        gid_index = static_cast<uint16_t>(i);
+                        break;
+                    }
+                }
+            }
+
             // success open
             {
                 rnic = new RNicHandler(idx.dev_id, idx.port_id, ib_ctx, pd,
-                                       port_attr.lid);
+                                       port_attr.lid, gid_index);
+                NOVA_LOG(INFO) << "selected RoCE GID index " << gid_index;
             }
 
             OPEN_END:

@@ -165,7 +165,7 @@ namespace nova {
         send_sge_index_[qp_idx]++;
         NOVA_LOG(DEBUG) << fmt::format(
                     "rdma-rc[{}]: SQ: rdma {} request to server {} wr:{} imm:{} roffset:{} isoff:{} size:{} p:{}:{}",
-                    thread_id_, ibv_wr_opcode_str(opcode), server_id, wr_id,
+                    thread_id_, nova::ibv_wr_opcode_str(opcode), server_id, wr_id,
                     imm_data,
                     remote_addr, is_offset, size, psend_index_[qp_idx],
                     npending_send_[qp_idx]);

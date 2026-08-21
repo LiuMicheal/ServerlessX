@@ -10,6 +10,7 @@
 #include "leveldb/status.h"
 #include "leveldb/env_bg_thread.h"
 #include "leveldb/iterator.h"
+#include <functional>
 
 #include "db/dbformat.h"
 #include "db/version_edit.h"

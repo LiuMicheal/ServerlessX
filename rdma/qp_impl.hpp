@@ -294,7 +294,7 @@ namespace rdmaio {
             qp_attr.ah_attr.is_global = 1;
             qp_attr.ah_attr.grh.dgid.global.subnet_prefix = attr.addr.subnet_prefix;
             qp_attr.ah_attr.grh.dgid.global.interface_id = attr.addr.interface_id;
-            qp_attr.ah_attr.grh.sgid_index = 0;
+            qp_attr.ah_attr.grh.sgid_index = rnic->gid;
             qp_attr.ah_attr.grh.flow_label = 0;
             qp_attr.ah_attr.grh.hop_limit = 255;
 

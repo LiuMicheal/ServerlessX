@@ -9,6 +9,7 @@
 #define LEVELDB_STOC_CLIENT_IMPL_H
 
 #include <semaphore.h>
+#include <cerrno>
 #include <unordered_map>
 
 #include "util/env_mem.h"
@@ -115,8 +116,13 @@ namespace leveldb {
 
         std::vector<nova::RDMAMsgHandler *> rdma_msg_handlers_;
 
-        sem_t Wait() {
-            NOVA_ASSERT(sem_wait(&sem_) == 0);
+        void Wait() {
+            int ret;
+            do {
+                ret = sem_wait(&sem_);
+            } while (ret != 0 && errno == EINTR);
+            NOVA_ASSERT(ret == 0)
+                << fmt::format("sem_wait failed errno:{}", errno);
         }
 
         static std::atomic_int_fast32_t rdma_worker_seq_id_;

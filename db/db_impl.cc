@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <set>
 #include <string>
 #include <vector>
@@ -3417,6 +3418,40 @@ namespace leveldb {
         if (options.enable_range_index) {
             impl->range_index_manager_ = new RangeIndexManager(&impl->scan_stats, impl->versions_,
                                                                impl->user_comparator_);
+            // A fresh database has no recovery record from which Recover() can
+            // construct the initial range index.  Seed the index with the
+            // active memtables before the first Put; otherwise the first
+            // memtable rotation dereferences RangeIndexManager::current_.
+            if (!nova::NovaConfig::config->recover_dbs) {
+                RangeIndex *init = new RangeIndex(&impl->scan_stats, 0,
+                                                  impl->versions_->current_version_id());
+                if (options.enable_subranges) {
+                    auto *srs = impl->subrange_manager_->latest_subranges_.load();
+                    for (int i = 0; i < srs->subranges.size(); i++) {
+                        const auto &sr = srs->subranges[i];
+                        Range range = {};
+                        range.lower = sr.tiny_ranges[0].lower;
+                        range.upper = sr.tiny_ranges[sr.tiny_ranges.size() - 1].upper;
+                        init->ranges_.push_back(range);
+                        RangeTables tables = {};
+                        tables.memtable_ids.insert(
+                                impl->partitioned_active_memtables_[i]->active_memtable->memtableid());
+                        init->range_tables_.push_back(tables);
+                    }
+                } else {
+                    Range range = {};
+                    range.lower = std::to_string(options.lower_key);
+                    range.upper = std::to_string(options.upper_key);
+                    init->ranges_.push_back(range);
+                    RangeTables tables = {};
+                    for (const auto *partition : impl->partitioned_active_memtables_) {
+                        tables.memtable_ids.insert(partition->active_memtable->memtableid());
+                    }
+                    init->range_tables_.push_back(tables);
+                }
+                impl->range_index_manager_->Initialize(init);
+                NOVA_LOG(rdmaio::INFO) << init->DebugString();
+            }
         }
         impl->mutex_.Unlock();
         *dbptr = impl;
