@@ -392,3 +392,58 @@ Nova-compatible table format, but it still does not reproduce Nova-LSM's DB,
 remote storage, persistence, compaction, or scheduling services. The next
 paper-sized step remains repeated small-SST runs; a full Nova-LSM port is out of
 scope for this stage.
+
+## Nova-LSM original build and local workload (2026-08-21)
+
+The upstream Nova-LSM source was cloned directly in the mem01 Guest from
+`https://github.com/HaoyuHuang/NovaLSM` at commit
+`8a661197ce5b993f2baeef608f34192d1ef0adf5` (2021-06-20). The clone is kept
+outside this repository at `/home/liumx/nova-lsm-baseline-20260821`; mem02 was
+not modified or used for this build.
+
+The Guest build used the repository's CMake targets and a user-prefix for the
+static `gflags` and `fmt` dependencies:
+
+```text
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_CXX_FLAGS='-I/home/liumx/nova-deps/prefix/include -U__SSE4_2__'
+cmake --build build -j2
+```
+
+`cmake --build` completed successfully and produced the Nova server, table,
+subrange, scatter, MemTable, and unit-test targets. Five small compatibility
+edits were confined to the Guest clone (missing standard headers, a math
+header, and qualification of Nova's opcode formatter); the upstream GitHub
+source was not changed or pushed. The resulting target hashes are:
+
+```text
+nova_server_main        17506425ce4ecc63f207b7a69e51a22aa17f3b850c8dea79076d82a7f6da5619
+nova_server_main_debug  583de668a1290e77483216caa8c041ff2a57488ed02bc6e8946346e98f88cd12
+nova_subrange_sim       dd4486b18f64980b52cfffbc925abfe6beedeb369e2c19afc4b130a2280cfdbc
+file_reader             7ab9821149f522cdf235028698f2bb3aadb28923e268b3c33b123dbb4486cf6a
+scatter_bench           b4ffc385828d75b6d9fe13c68ed8e96dbce14d449c8d3851d9b7e08fbe2708e7
+memtable_bench          49fd74f7d1c44f00ff456ba5efed15176d2d2f69c8cec458615773c65de3e923
+version_set_test        3a5ca17349576fe86cbc134faf376306b97a8c5de6a14910f9eec7f7e9949dc1
+bloom_test              23dfa8c9675806a96a68e2cdbdb4330f93076e8c3d7250f4ff7bae5a60456d93
+filter_block_test       d1735e563c7ead711c55a16c990c41b4f0293e635b024f56f3a19af3c779dafe
+```
+
+`bloom_test` (3 tests) and `filter_block_test` (2 tests) passed. The upstream
+`version_set_test` crashed in its first `TestNonOverlappingSetDEBUG3` case with
+SIGSEGV (exit 139); this was recorded as an upstream test failure, without
+expanding the compatibility patch. The local MemTable workload completed with
+two workers, two partitions, 1 MiB MemTable, 1,000 keys, 32-byte values, and
+4,000,000 inserts per worker:
+
+```text
+memtable_bench --num_workers=2 --nkeys=1000 --value_size=32 \
+  --memtable_size_mb=1 --npartitions=2 --max_ops=4000000
+throughput,1333332.0
+```
+
+This is a process-local, in-memory workload and the reported value is a smoke
+run observation, not a performance baseline. `nova_server_main` was not
+started: its normal path constructs the RDMA control plane and requires a
+multi-node Nova configuration, so starting it would exceed this minimal local
+build/test scope. No Host or Guest reboot, module change, physical-host RDMA
+operation, or storage benchmark was performed.
