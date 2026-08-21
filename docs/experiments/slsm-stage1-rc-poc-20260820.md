@@ -337,3 +337,58 @@ process-local; this is one MemTable flush/read path, not a complete durable LSM.
 The next gate is to measure repeated workloads and then decide whether a small
 Nova-LSM-style read API is needed. Full Nova-LSM integration, persistence, and
 compaction remain later work.
+
+## Nova SST Guest correctness gate (2026-08-21)
+
+The rebuilt Nova-compatible clients were copied to a separate directory in the
+two existing Guests; the previously installed binaries were not overwritten.
+The source build was performed with:
+
+```text
+make -C slsm-user clean test
+```
+
+The four offline tests passed again. The runtime clients were:
+
+```text
+slsm_cn  17889db1eaf64c525551099d91b6ece9ca6abbb5886d99a8c32701372e709e5b
+slsm_sn  7b708b60c7a6eb6bb80c8cc7ce4411e48e3d0d2e5f8ed13e5c74d984ea3408bf
+```
+
+The first attempt used the normal `liumx` SSH identity. The mem02 SN was
+rejected at `open("/dev/slsm")` with `EPERM`, and mem01 consequently received
+`FETCH=-22`. This is the loaded module's explicit `CAP_SYS_RAWIO` check, not an
+SST or RDMA payload failure. Both Guests permit `sudo -n`, so the bounded retry
+used Guest-root privileges for both clients; no module, VM, or Host state was
+changed.
+
+With mem01 as CN and mem02 as SN, the retry passed the complete lifecycle:
+
+```text
+CN: {"event":"stage4_result","role":"cn","status":"pass",
+     "lifecycle":"publish-fetch-commit-revoke","generation":534897581685613,
+     "sst_id":20260822,"bytes":332,"chunks":1,
+     "checksum":"0xbd0eb86d4d7c34de","sn_elapsed_us":11,
+     "level":0,"epoch":1,"key_range":[20260822000,20260822007],
+     "records":8,"manifest_version":3}
+SN: {"event":"stage4_result","role":"sn","status":"pass",
+     "lifecycle":"publish-fetch-commit-revoke","generation":534897581685613,
+     "sst_id":20260822,"bytes":332,"chunks":1,
+     "checksum":"0xbd0eb86d4d7c34de","elapsed_us":11,
+     "records":8,"lookup_key":20260822000,"lookup_value":20260822007,
+     "manifest_version":3}
+```
+
+This is a single-direction correctness gate: the fetched Nova-compatible table
+passed the outer SLSM header check, FNV checksum agreement, Nova footer/block
+CRC validation, snapshot lookup, and Manifest lifecycle. The `11 us` value is
+an observation from this one run, not a latency or throughput result. Both
+processes exited and port `18515` was released. The original `slsm.ko` stayed
+loaded with reference count zero; it was not unloaded, and neither Guest nor
+physical Host was rebooted.
+
+This extends runtime evidence from the earlier fixed-record SST to the
+Nova-compatible table format, but it still does not reproduce Nova-LSM's DB,
+remote storage, persistence, compaction, or scheduling services. The next
+paper-sized step remains repeated small-SST runs; a full Nova-LSM port is out of
+scope for this stage.
