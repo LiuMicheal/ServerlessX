@@ -213,3 +213,45 @@ Guest session, module load, Host reboot, or physical RNIC operation was used.
 Measure repeated small-SST workloads and then decide whether a small
 Nova-LSM-style read API is needed. Full Nova-LSM integration, persistence, and
 compaction remain later work.
+
+## Nova SST Guest correctness gate (2026-08-21)
+
+The external Mitosis worktree rebuilt the two userspace clients with
+`make -C slsm-user clean test`; all four offline tests passed. The new client
+artifact hashes were:
+
+```text
+slsm_cn  17889db1eaf64c525551099d91b6ece9ca6abbb5886d99a8c32701372e709e5b
+slsm_sn  7b708b60c7a6eb6bb80c8cc7ce4411e48e3d0d2e5f8ed13e5c74d984ea3408bf
+```
+
+The first non-privileged attempt was rejected by the existing module at
+`open("/dev/slsm")` with `EPERM`; the module explicitly requires
+`CAP_SYS_RAWIO`. A bounded retry used Guest-root privileges only, without
+changing the module or rebooting either Guest or Host.
+
+With the compute role on mem01 and storage role on mem02, the retry passed:
+
+```text
+{"event":"stage4_result","role":"cn","status":"pass",
+ "lifecycle":"publish-fetch-commit-revoke","sst_id":20260822,
+ "bytes":332,"chunks":1,"checksum":"0xbd0eb86d4d7c34de",
+ "sn_elapsed_us":11,"records":8,"manifest_version":3}
+{"event":"stage4_result","role":"sn","status":"pass",
+ "lifecycle":"publish-fetch-commit-revoke","sst_id":20260822,
+ "bytes":332,"chunks":1,"checksum":"0xbd0eb86d4d7c34de",
+ "elapsed_us":11,"lookup_key":20260822000,
+ "lookup_value":20260822007,"manifest_version":3}
+```
+
+The same checksum, Nova footer/block CRC validation, point lookup, and
+`PUBLISH -> FETCH -> COMMIT -> REVOKE` Manifest lifecycle were observed on both
+roles. Both processes exited and the listener was released. This is a single
+correctness run, not a performance measurement; the `11 us` observation must
+not be compared with baselines. The original module remained loaded and no
+module unload or reboot occurred.
+
+This is runtime evidence for the small Nova-compatible SST adapter over the
+existing SLSM RC/RDMA path. It is not evidence of a complete Nova-LSM engine,
+persistent storage, compaction, or ServerlessX integration. Repeated small-SST
+runs remain the next scoped experiment.
