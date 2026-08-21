@@ -13,6 +13,8 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -23,7 +25,10 @@
 
 static void usage(const char *program)
 {
-    fprintf(stderr, "Usage: %s [--device PATH] [--server IPv4] [--port PORT]\n", program);
+    fprintf(stderr,
+            "Usage: %s [--device PATH] [--server IPv4] [--port PORT] "
+            "[--on-demand]\n",
+            program);
 }
 
 static int connect_with_retry(const char *address, uint16_t port)
@@ -80,6 +85,7 @@ int main(int argc, char **argv)
         {"device", required_argument, NULL, 'd'},
         {"server", required_argument, NULL, 's'},
         {"port", required_argument, NULL, 'p'},
+        {"on-demand", no_argument, NULL, 'o'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
@@ -105,12 +111,13 @@ int main(int argc, char **argv)
     int device_fd = -1;
     int connected = 0;
     int manifest_active = 0;
+    int on_demand = 0;
     int result = EXIT_FAILURE;
     int option;
 
     slsm_manifest_init(&manifest);
 
-    while ((option = getopt_long(argc, argv, "d:s:p:h", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "d:s:p:oh", options, NULL)) != -1) {
         switch (option) {
         case 'd': device = optarg; break;
         case 's': server_address = optarg; break;
@@ -120,6 +127,7 @@ int main(int argc, char **argv)
                 return EXIT_FAILURE;
             }
             break;
+        case 'o': on_demand = 1; break;
         case 'h': usage(argv[0]); return EXIT_SUCCESS;
         default: usage(argv[0]); return EXIT_FAILURE;
         }
@@ -129,6 +137,12 @@ int main(int argc, char **argv)
         fprintf(stderr, "--server is required\n");
         usage(argv[0]);
         return EXIT_FAILURE;
+    }
+
+    if (on_demand) {
+        printf("{\"event\":\"ondemand_worker\",\"status\":\"waiting\","
+               "\"device_open\":false}\n");
+        fflush(stdout);
     }
 
     control_fd = connect_with_retry(server_address, port);
@@ -156,6 +170,56 @@ int main(int argc, char **argv)
         fprintf(stderr, "invalid PUBLISH from CN\n");
         ack.status = -EINVAL;
         goto send_ack;
+    }
+
+    if (on_demand) {
+        printf("{\"event\":\"ondemand_worker\",\"status\":\"triggered\","
+               "\"device_open\":false}\n");
+        fflush(stdout);
+    }
+
+    /*
+     * The dispatcher has received a valid request but has not opened the
+     * SLSM device or issued an RDMA ioctl.  In on-demand mode, only the child
+     * becomes the short-lived session worker; the parent waits and reports its
+     * exit status.  The default mode keeps the original one-process behavior.
+     */
+    if (on_demand) {
+        pid_t worker_pid;
+        int worker_status;
+
+        fflush(NULL);
+        worker_pid = fork();
+        if (worker_pid < 0) {
+            ack.phase = SLSM_PHASE_FETCH;
+            ack.generation = message.generation;
+            ack.status = -errno;
+            goto send_ack;
+        }
+        if (worker_pid > 0) {
+            int wait_status;
+
+            close(control_fd);
+            control_fd = -1;
+            printf("{\"event\":\"ondemand_worker\",\"status\":\"started\","
+                   "\"pid\":%ld}\n", (long)worker_pid);
+            fflush(stdout);
+            do {
+                worker_status = waitpid(worker_pid, &wait_status, 0);
+            } while (worker_status < 0 && errno == EINTR);
+            if (worker_status < 0)
+                return EXIT_FAILURE;
+            if (WIFEXITED(wait_status))
+                worker_status = WEXITSTATUS(wait_status);
+            else
+                worker_status = EXIT_FAILURE;
+            printf("{\"event\":\"ondemand_worker\",\"status\":\"%s\","
+                   "\"pid\":%ld,\"exit_code\":%d}\n",
+                   worker_status == EXIT_SUCCESS ? "stopped" : "failed",
+                   (long)worker_pid, worker_status);
+            fflush(stdout);
+            return worker_status == EXIT_SUCCESS ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
     }
     if (posix_memalign(&buffer, 4096, (size_t)message.descriptor.total_length) != 0) {
         ack.status = -ENOMEM;

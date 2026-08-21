@@ -447,3 +447,53 @@ started: its normal path constructs the RDMA control plane and requires a
 multi-node Nova configuration, so starting it would exceed this minimal local
 build/test scope. No Host or Guest reboot, module change, physical-host RDMA
 operation, or storage benchmark was performed.
+
+## On-demand lifecycle worker gate (2026-08-22)
+
+The next small-paper increment adds `--on-demand` to `slsm_sn` without changing
+the kernel module or the SLSM UAPI. In this mode the SN process is only a
+dispatcher while it waits for the CN control connection. It does not open
+`/dev/slsm` or issue an ioctl during the wait. After a valid `PUBLISH` arrives,
+it forks one short-lived worker; the worker opens the device, performs the
+existing `FETCH -> COMMIT -> REVOKE` lifecycle, and exits. The parent reports
+the worker exit status and then exits as well. The default one-process SN mode
+is unchanged.
+
+The offline build and tests remained green:
+
+```text
+make -C slsm-user clean test
+manifest_test  pass
+sst_test       pass
+common_test    pass
+nova_sst_test  pass
+```
+
+A single two-Guest gate used a fresh control port and the existing loaded
+`slsm.ko`; no module was unloaded and no Guest or physical Host was rebooted.
+The waiting check observed `device_fds=0` before the CN was started. The live
+session then produced:
+
+```text
+SN: {"event":"ondemand_worker","status":"waiting","device_open":false}
+SN: {"event":"ondemand_worker","status":"triggered","device_open":false}
+SN: {"event":"ondemand_worker","status":"started"}
+CN: {"event":"stage4_result","role":"cn","status":"pass",
+     "lifecycle":"publish-fetch-commit-revoke","manifest_version":3}
+SN: {"event":"stage4_result","role":"sn","status":"pass",
+     "lifecycle":"publish-fetch-commit-revoke","manifest_version":3}
+SN: {"event":"ondemand_worker","status":"stopped","exit_code":0}
+```
+
+The CN and SN reported the same generation, SST ID, 332-byte payload, and
+checksum. The module reference count returned to zero and the control listener
+was released after the worker exited. The on-demand SN binary hash was
+`faa19992a53f41aedefe6ee709e8cd714c6ecb6e65f173af709ae7494aa93eb6`; the CN
+binary remained unchanged.
+
+This gate establishes an on-demand SST/lifecycle worker, not a complete
+two-SST compaction. The current kernel ABI intentionally supports one
+registered region and one RC session per open file, and the Nova-compatible
+reader currently exposes point lookup rather than an iterator. A real L0
+merge and atomic input/output Manifest replacement therefore remain a separate
+next step; they are not claimed by this result.
