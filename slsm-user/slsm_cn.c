@@ -1,4 +1,5 @@
 #include "slsm_common.h"
+#include "slsm_compaction.h"
 #include "slsm_sst.h"
 
 #include <arpa/inet.h>
@@ -20,7 +21,8 @@ static void usage(const char *program)
 {
     fprintf(stderr,
             "Usage: %s [--device PATH] [--bind IPv4] [--port PORT] "
-            "[--records COUNT] [--sst-id ID] [--epoch E] [--level L]\n",
+            "[--records COUNT] [--sst-id ID] [--epoch E] [--level L] "
+            "[--compaction]\n",
             program);
 }
 
@@ -62,6 +64,212 @@ fail:
     return -1;
 }
 
+static int run_compaction(const char *device, const char *bind_address,
+                          uint16_t port, uint64_t sst_id, uint64_t epoch)
+{
+    struct slsm_memtable first_memtable;
+    struct slsm_memtable second_memtable;
+    struct slsm_sst_metadata first_metadata;
+    struct slsm_sst_metadata second_metadata;
+    struct slsm_sst_metadata output_metadata;
+    struct slsm_compaction_batch_header batch_header;
+    struct slsm_register_req request = {0};
+    struct slsm_lifecycle_message message = {0};
+    struct slsm_lifecycle_ack ack = {0};
+    struct pollfd poll_fd;
+    uint64_t first_sst_id;
+    uint64_t second_sst_id;
+    uint64_t output_sst_id;
+    uint64_t job_id;
+    uint64_t userspace_checksum;
+    uint64_t commit_manifest_version = 0;
+    size_t first_length;
+    size_t second_length;
+    size_t batch_length;
+    uint64_t base_key;
+    void *first_buffer = NULL;
+    void *second_buffer = NULL;
+    void *batch_buffer = NULL;
+    int device_fd = -1;
+    int listener_fd = -1;
+    int client_fd = -1;
+    int result = EXIT_FAILURE;
+
+    if (sst_id > (UINT64_MAX - UINT64_C(3)) / UINT64_C(10) ||
+        epoch == 0 || sst_id == 0) {
+        fprintf(stderr, "compaction sst-id is too large or zero\n");
+        return EXIT_FAILURE;
+    }
+    first_sst_id = sst_id * UINT64_C(10) + UINT64_C(1);
+    second_sst_id = first_sst_id + UINT64_C(1);
+    output_sst_id = first_sst_id + UINT64_C(2);
+    job_id = output_sst_id;
+    base_key = sst_id * UINT64_C(10);
+    slsm_memtable_init(&first_memtable);
+    slsm_memtable_init(&second_memtable);
+    if (slsm_memtable_put(&first_memtable, base_key, base_key + UINT64_C(1000)) != 0 ||
+        slsm_memtable_put(&first_memtable, base_key + UINT64_C(1),
+                          base_key + UINT64_C(1001)) != 0 ||
+        slsm_memtable_put(&first_memtable, base_key + UINT64_C(2),
+                          base_key + UINT64_C(1002)) != 0 ||
+        slsm_memtable_put(&second_memtable, base_key + UINT64_C(1),
+                          base_key + UINT64_C(2001)) != 0 ||
+        slsm_memtable_put(&second_memtable, base_key + UINT64_C(2),
+                          base_key + UINT64_C(2002)) != 0 ||
+        slsm_memtable_put(&second_memtable, base_key + UINT64_C(3),
+                          base_key + UINT64_C(2003)) != 0) {
+        fprintf(stderr, "failed to populate compaction MemTables\n");
+        goto out;
+    }
+    if (posix_memalign(&first_buffer, 4096, SLSM_SST_MAX_SIZE) != 0 ||
+        posix_memalign(&second_buffer, 4096, SLSM_SST_MAX_SIZE) != 0 ||
+        posix_memalign(&batch_buffer, 4096, SLSM_MAX_SST_SIZE) != 0) {
+        fprintf(stderr, "failed to allocate compaction buffers\n");
+        goto out;
+    }
+    if (slsm_sst_flush(&first_memtable, first_sst_id, epoch, first_buffer,
+                       SLSM_SST_MAX_SIZE, &first_length, &first_metadata) != 0 ||
+        slsm_sst_flush(&second_memtable, second_sst_id, epoch, second_buffer,
+                       SLSM_SST_MAX_SIZE, &second_length, &second_metadata) != 0 ||
+        slsm_compaction_pack(first_buffer, first_length, first_sst_id,
+                             second_buffer, second_length, second_sst_id, job_id,
+                             output_sst_id, epoch, batch_buffer, SLSM_MAX_SST_SIZE,
+                             &batch_length) != 0) {
+        fprintf(stderr, "failed to build compaction batch\n");
+        goto out;
+    }
+    if (slsm_compaction_validate(batch_buffer, batch_length, &batch_header) != 0) {
+        fprintf(stderr, "failed to validate compaction batch\n");
+        goto out;
+    }
+    output_metadata = (struct slsm_sst_metadata){
+        .version = SLSM_METADATA_VERSION,
+        .level = 1,
+        .epoch = epoch,
+        .min_key = first_metadata.min_key < second_metadata.min_key ?
+                   first_metadata.min_key : second_metadata.min_key,
+        .max_key = first_metadata.max_key > second_metadata.max_key ?
+                   first_metadata.max_key : second_metadata.max_key,
+    };
+    userspace_checksum = slsm_fnv1a(batch_buffer, batch_length);
+    device_fd = open(device, O_RDWR | O_CLOEXEC);
+    if (device_fd < 0) {
+        perror("open /dev/slsm");
+        goto out;
+    }
+    request.user_addr = (uintptr_t)batch_buffer;
+    request.length = batch_length;
+    request.sst_id = output_sst_id;
+    if (ioctl(device_fd, SLSM_IOCTL_REGISTER_REGION, &request) != 0) {
+        perror("SLSM_IOCTL_REGISTER_REGION");
+        goto out;
+    }
+    if (request.descriptor.checksum != userspace_checksum) {
+        fprintf(stderr, "kernel/userspace compaction checksum disagreement\n");
+        goto unregister;
+    }
+    listener_fd = create_listener(bind_address, port);
+    if (listener_fd < 0) {
+        perror("control listener");
+        goto unregister;
+    }
+    printf("{\"event\":\"cn_ready\",\"status\":\"ok\",\"mode\":\"compaction\","
+           "\"output_sst_id\":%" PRIu64 ",\"input_sst_ids\":[%" PRIu64 ",%" PRIu64
+           "],\"bytes\":%zu,\"checksum\":\"0x%016" PRIx64 "\",\"bind\":\"%s\","
+           "\"port\":%u}\n", output_sst_id, first_sst_id, second_sst_id, batch_length,
+           userspace_checksum, bind_address, port);
+    fflush(stdout);
+    poll_fd.fd = listener_fd;
+    poll_fd.events = POLLIN;
+    if (poll(&poll_fd, 1, SLSM_CONTROL_TIMEOUT_MS) <= 0) {
+        if (errno == 0)
+            errno = ETIMEDOUT;
+        perror("waiting for SN");
+        goto unregister;
+    }
+    client_fd = accept(listener_fd, NULL, NULL);
+    if (client_fd < 0) {
+        perror("accept");
+        goto unregister;
+    }
+    message.magic = SLSM_CONTROL_MAGIC;
+    message.version = SLSM_LIFECYCLE_VERSION;
+    message.phase = SLSM_PHASE_PUBLISH;
+    message.generation = make_generation(job_id);
+    message.descriptor = request.descriptor;
+    message.metadata = output_metadata;
+    if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
+        slsm_read_full(client_fd, &ack, sizeof(ack)) != 0) {
+        perror("compaction publish exchange");
+        goto unregister;
+    }
+    if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
+        ack.phase != SLSM_PHASE_FETCH || ack.generation != message.generation ||
+        ack.status != 0 || ack.fetched_length != batch_length ||
+        ack.checksum != userspace_checksum) {
+        fprintf(stderr, "SN rejected compaction FETCH: status=%d bytes=%" PRIu64 "\n",
+                ack.status, ack.fetched_length);
+        goto unregister;
+    }
+    message.phase = SLSM_PHASE_COMMIT;
+    ack = (struct slsm_lifecycle_ack){0};
+    if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
+        slsm_read_full(client_fd, &ack, sizeof(ack)) != 0) {
+        perror("compaction commit exchange");
+        goto unregister;
+    }
+    if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
+        ack.phase != SLSM_PHASE_COMMIT || ack.generation != message.generation ||
+        ack.status != 0 || ack.manifest_version == 0 ||
+        ack.lookup_sst_id != output_sst_id) {
+        fprintf(stderr, "SN rejected compaction COMMIT: status=%d lookup=%" PRIu64 "\n",
+                ack.status, ack.lookup_sst_id);
+        goto unregister;
+    }
+    commit_manifest_version = ack.manifest_version;
+    message.phase = SLSM_PHASE_REVOKE;
+    ack = (struct slsm_lifecycle_ack){0};
+    if (slsm_write_full(client_fd, &message, sizeof(message)) != 0 ||
+        slsm_read_full(client_fd, &ack, sizeof(ack)) != 0) {
+        perror("compaction revoke exchange");
+        goto unregister;
+    }
+    if (ack.magic != SLSM_CONTROL_MAGIC || ack.version != SLSM_LIFECYCLE_VERSION ||
+        ack.phase != SLSM_PHASE_REVOKE || ack.generation != message.generation ||
+        ack.status != 0 || ack.manifest_version <= commit_manifest_version ||
+        ack.lookup_sst_id != output_sst_id) {
+        fprintf(stderr, "SN rejected compaction REVOKE: status=%d\n", ack.status);
+        goto unregister;
+    }
+    result = EXIT_SUCCESS;
+unregister:
+    if (ioctl(device_fd, SLSM_IOCTL_UNREGISTER_REGION, 0) != 0) {
+        perror("SLSM_IOCTL_UNREGISTER_REGION");
+        result = EXIT_FAILURE;
+    }
+    if (result == EXIT_SUCCESS) {
+        printf("{\"event\":\"stage5_result\",\"role\":\"cn\",\"status\":\"pass\","
+               "\"mode\":\"compaction\",\"lifecycle\":\"publish-fetch-commit-revoke\","
+               "\"input_sst_ids\":[%" PRIu64 ",%" PRIu64 "],\"output_sst_id\":%" PRIu64
+               ",\"output_level\":1,\"output_key_range\":[%" PRIu64 ",%" PRIu64
+               "],\"manifest_version\":%" PRIu64 "}\n", first_sst_id, second_sst_id,
+               output_sst_id, output_metadata.min_key, output_metadata.max_key,
+               ack.manifest_version);
+    }
+out:
+    if (client_fd >= 0)
+        close(client_fd);
+    if (listener_fd >= 0)
+        close(listener_fd);
+    if (device_fd >= 0)
+        close(device_fd);
+    free(first_buffer);
+    free(second_buffer);
+    free(batch_buffer);
+    (void)batch_header;
+    return result;
+}
+
 int main(int argc, char **argv)
 {
     static const struct option options[] = {
@@ -72,6 +280,7 @@ int main(int argc, char **argv)
         {"sst-id", required_argument, NULL, 'i'},
         {"epoch", required_argument, NULL, 'e'},
         {"level", required_argument, NULL, 'l'},
+        {"compaction", no_argument, NULL, 'c'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
@@ -82,6 +291,7 @@ int main(int argc, char **argv)
     uint64_t sst_id = 1;
     uint64_t epoch = 1;
     uint64_t level = 0;
+    int compaction = 0;
     struct slsm_register_req request = {0};
     struct slsm_memtable memtable;
     struct slsm_sst_metadata metadata;
@@ -101,7 +311,7 @@ int main(int argc, char **argv)
     int result = EXIT_FAILURE;
     int option;
 
-    while ((option = getopt_long(argc, argv, "d:b:p:r:i:e:l:h", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "d:b:p:r:i:e:l:ch", options, NULL)) != -1) {
         switch (option) {
         case 'd': device = optarg; break;
         case 'b': bind_address = optarg; break;
@@ -136,6 +346,7 @@ int main(int argc, char **argv)
                 return EXIT_FAILURE;
             }
             break;
+        case 'c': compaction = 1; break;
         case 'h': usage(argv[0]); return EXIT_SUCCESS;
         default: usage(argv[0]); return EXIT_FAILURE;
         }
@@ -146,6 +357,8 @@ int main(int argc, char **argv)
         usage(argv[0]);
         return EXIT_FAILURE;
     }
+    if (compaction)
+        return run_compaction(device, bind_address, port, sst_id, epoch);
 
     if (sst_id > (UINT64_MAX - UINT64_C(7) - (records - 1)) / UINT64_C(1000)) {
         fprintf(stderr, "sst-id is too large for the default key range\n");

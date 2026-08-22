@@ -497,3 +497,90 @@ registered region and one RC session per open file, and the Nova-compatible
 reader currently exposes point lookup rather than an iterator. A real L0
 merge and atomic input/output Manifest replacement therefore remain a separate
 next step; they are not claimed by this result.
+
+## Minimal two-SST compaction gate (2026-08-22)
+
+This increment implements the smallest real LSM-shaped compaction path without
+changing the loaded kernel module or `slsm_uapi.h`. Because the kernel ABI
+allows one registered region and one RC session per open file, CN packs a
+private compaction header followed by two complete Nova-compatible SSTs into
+one contiguous region. SN performs one RDMA `FETCH_REGION`, validates both
+embedded SSTs, merges their sorted key/value records, and builds one output
+SST with user-space metadata `level=1`. When a key overlaps, the second input
+is treated as the newer version.
+
+The new user-space pieces are:
+
+```text
+slsm-user/slsm_compaction.[ch]       batch packing, validation, and merge
+slsm-user/slsm_compaction_test.c     offline merge correctness test
+slsm-user/slsm_cn.c                  --compaction CN lifecycle
+slsm-user/slsm_sn.c                  --compaction SN worker lifecycle
+```
+
+The bounded implementation intentionally supports only the small-paper gate:
+the merge collector scans dense integer key ranges up to 4096 keys and the
+existing MemTable bound remains 32 records. It is not a general SST iterator,
+multi-level scheduler, or durable compaction service. SN's compaction Manifest
+entries for the two inputs and output are process-local metadata; the input
+descriptors used during replacement are local bookkeeping descriptors and are
+not advertised as independently fetchable remote regions. The compaction
+`REVOKE` has replacement semantics: it removes the two input entries while
+leaving the committed output entry visible until the worker exits. This differs
+from the ordinary single-SST `REVOKE` path.
+
+### Offline gate
+
+```text
+make -C slsm-user clean test
+{"event":"compaction_test","status":"pass","inputs":2,
+ "output_level":1,"output_records":4,"overlap_key":101,
+ "overlap_value":2001}
+```
+
+The test verifies batch bounds, both input SST formats, deduplication, the
+second-input-wins rule, L1 output metadata, output validation, and point
+lookups. The source-build hashes of the new clients are:
+
+```text
+slsm_cn  577845f147c250448133b2107436ab8cc2fd26e042150a0fe57dc5c596186f08
+slsm_sn  1c8664472aa9950c732b85e5003b09c125d822db9aa52096d2e37a0ad6da2208
+```
+
+### Two-Guest correctness gate
+
+The run used the already loaded, runtime-validated `slsm.ko` in the two
+isolated Guests. CN was `mem01` (`10.10.12.119`) and on-demand SN was `mem02`
+(`10.10.12.120`), with control port `18525`:
+
+```text
+CN: {"event":"cn_ready","status":"ok","mode":"compaction",
+     "output_sst_id":20263,"input_sst_ids":[20261,20262],
+     "bytes":550,"checksum":"0x86941bcb0f252513","port":18525}
+CN: {"event":"stage5_result","role":"cn","status":"pass",
+     "mode":"compaction","input_sst_ids":[20261,20262],
+     "output_sst_id":20263,"output_level":1,
+     "output_key_range":[20260,20263],"manifest_version":6}
+SN: {"event":"ondemand_worker","status":"waiting","device_open":false}
+SN: {"event":"ondemand_worker","status":"triggered","device_open":false}
+SN: {"event":"ondemand_worker","status":"started"}
+SN: {"event":"stage5_result","role":"sn","status":"pass",
+     "mode":"compaction","input_sst_ids":[20261,20262],
+     "output_sst_id":20263,"output_level":1,"output_records":4,
+     "overlap_key":20261,"overlap_value":22261,
+     "bytes":550,"elapsed_us":14,"manifest_version":6}
+SN: {"event":"ondemand_worker","status":"stopped","exit_code":0}
+```
+
+Both sides agreed on the 550-byte batch checksum. The SN output contains the
+three records from the first input plus the new key from the second input,
+with the overlapping key `20261` resolved to `22261`. After the session,
+both Guests had no SLSM test process or control listener and
+`/sys/module/slsm/refcnt` was `0`.
+
+This is a single correctness observation, not a latency/throughput result.
+It does not claim persistent SST files, atomic durable Manifest updates,
+failure recovery, concurrent jobs, elastic scheduling, or a full Nova-LSM
+compaction implementation. No physical Host was modified, no Host RDMA
+discovery or workload was run, no module was unloaded or replaced, and no
+machine was rebooted.

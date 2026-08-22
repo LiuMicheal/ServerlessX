@@ -1,4 +1,5 @@
 #include "slsm_common.h"
+#include "slsm_compaction.h"
 #include "slsm_manifest.h"
 #include "slsm_sst.h"
 
@@ -27,7 +28,7 @@ static void usage(const char *program)
 {
     fprintf(stderr,
             "Usage: %s [--device PATH] [--server IPv4] [--port PORT] "
-            "[--on-demand]\n",
+            "[--on-demand] [--compaction]\n",
             program);
 }
 
@@ -79,6 +80,52 @@ static int connect_with_retry(const char *address, uint16_t port)
     return -1;
 }
 
+static void make_local_descriptor(const struct slsm_sst_descriptor *base,
+                                  uint64_t sst_id, size_t length, const void *data,
+                                  struct slsm_sst_descriptor *descriptor)
+{
+    *descriptor = *base;
+    descriptor->sst_id = sst_id;
+    descriptor->total_length = length;
+    descriptor->chunk_count = 1;
+    descriptor->chunk_size = SLSM_CHUNK_SIZE;
+    descriptor->checksum = slsm_fnv1a(data, length);
+    memset(descriptor->chunks, 0, sizeof(descriptor->chunks));
+}
+
+static int cleanup_compaction_manifest(struct slsm_manifest *manifest,
+                                       uint64_t first_sst_id,
+                                       uint64_t second_sst_id,
+                                       uint64_t output_sst_id,
+                                       int *first_active, int *second_active,
+                                       int *output_active, int output_committed)
+{
+    int result = 0;
+    int status;
+
+    if (*first_active) {
+        status = slsm_manifest_abort(manifest, first_sst_id);
+        if (status != 0 && result == 0)
+            result = status;
+        *first_active = 0;
+    }
+    if (*second_active) {
+        status = slsm_manifest_abort(manifest, second_sst_id);
+        if (status != 0 && result == 0)
+            result = status;
+        *second_active = 0;
+    }
+    if (*output_active) {
+        status = output_committed ?
+                 slsm_manifest_revoke(manifest, output_sst_id) :
+                 slsm_manifest_abort(manifest, output_sst_id);
+        if (status != 0 && result == 0)
+            result = status;
+        *output_active = 0;
+    }
+    return result;
+}
+
 int main(int argc, char **argv)
 {
     static const struct option options[] = {
@@ -86,6 +133,7 @@ int main(int argc, char **argv)
         {"server", required_argument, NULL, 's'},
         {"port", required_argument, NULL, 'p'},
         {"on-demand", no_argument, NULL, 'o'},
+        {"compaction", no_argument, NULL, 'c'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
@@ -102,22 +150,41 @@ int main(int argc, char **argv)
     struct slsm_fetch_req fetch_request = {0};
     struct slsm_manifest manifest;
     struct slsm_sst_header sst_header = {0};
+    struct slsm_sst_header output_header = {0};
+    struct slsm_sst_header input_headers[SLSM_COMPACTION_INPUTS] = {{0}};
+    struct slsm_compaction_batch_header batch_header = {0};
+    struct slsm_sst_metadata output_metadata = {0};
+    struct slsm_sst_metadata input_metadata[SLSM_COMPACTION_INPUTS] = {{0}};
+    struct slsm_sst_descriptor input_descriptors[SLSM_COMPACTION_INPUTS] = {{0}};
+    struct slsm_sst_descriptor output_descriptor = {0};
     const struct slsm_manifest_entry *lookup_entry;
     int manifest_status;
     uint64_t userspace_checksum = 0;
     uint64_t lookup_value = 0;
+    uint64_t overlap_key = 0;
+    uint64_t overlap_value = 0;
     void *buffer = NULL;
+    void *output_buffer = NULL;
     int control_fd = -1;
     int device_fd = -1;
     int connected = 0;
     int manifest_active = 0;
     int on_demand = 0;
+    int compaction = 0;
+    int compaction_first_active = 0;
+    int compaction_second_active = 0;
+    int compaction_output_active = 0;
+    int compaction_output_committed = 0;
+    uint64_t compaction_first_id = 0;
+    uint64_t compaction_second_id = 0;
+    uint64_t compaction_output_id = 0;
+    size_t output_length = 0;
     int result = EXIT_FAILURE;
     int option;
 
     slsm_manifest_init(&manifest);
 
-    while ((option = getopt_long(argc, argv, "d:s:p:oh", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "d:s:p:och", options, NULL)) != -1) {
         switch (option) {
         case 'd': device = optarg; break;
         case 's': server_address = optarg; break;
@@ -128,6 +195,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'o': on_demand = 1; break;
+        case 'c': compaction = 1; break;
         case 'h': usage(argv[0]); return EXIT_SUCCESS;
         default: usage(argv[0]); return EXIT_FAILURE;
         }
@@ -258,6 +326,196 @@ int main(int argc, char **argv)
         goto disconnect_send_ack;
     }
     userspace_checksum = slsm_fnv1a(buffer, (size_t)fetch_request.fetched_length);
+    if (compaction) {
+        uint64_t first_offset;
+        uint64_t second_offset;
+        size_t first_length;
+        size_t second_length;
+
+        if (fetch_request.fetched_length != message.descriptor.total_length ||
+            fetch_request.checksum != message.descriptor.checksum ||
+            userspace_checksum != message.descriptor.checksum ||
+            slsm_compaction_validate(buffer, (size_t)fetch_request.fetched_length,
+                                     &batch_header) != 0 ||
+            message.descriptor.sst_id != batch_header.output_sst_id ||
+            message.metadata.epoch != batch_header.epoch) {
+            fprintf(stderr, "compaction batch validation failed after RDMA READ\n");
+            ack.phase = SLSM_PHASE_FETCH;
+            ack.generation = message.generation;
+            ack.status = -EBADMSG;
+            goto disconnect_send_ack;
+        }
+        first_offset = batch_header.inputs[0].offset;
+        second_offset = batch_header.inputs[1].offset;
+        first_length = (size_t)batch_header.inputs[0].length;
+        second_length = (size_t)batch_header.inputs[1].length;
+        compaction_first_id = batch_header.inputs[0].sst_id;
+        compaction_second_id = batch_header.inputs[1].sst_id;
+        compaction_output_id = batch_header.output_sst_id;
+        if (posix_memalign(&output_buffer, 4096, SLSM_SST_MAX_SIZE) != 0 ||
+            slsm_sst_validate((const uint8_t *)buffer + first_offset, first_length,
+                              compaction_first_id, batch_header.epoch,
+                              &input_headers[0]) != 0 ||
+            slsm_sst_validate((const uint8_t *)buffer + second_offset, second_length,
+                              compaction_second_id, batch_header.epoch,
+                              &input_headers[1]) != 0 ||
+            slsm_compaction_merge(buffer, (size_t)fetch_request.fetched_length,
+                                  output_buffer, SLSM_SST_MAX_SIZE,
+                                  &output_metadata, &output_header, &overlap_key,
+                                  &overlap_value) != 0) {
+            fprintf(stderr, "compaction merge failed after RDMA READ\n");
+            ack.phase = SLSM_PHASE_FETCH;
+            ack.generation = message.generation;
+            ack.status = -EBADMSG;
+            goto disconnect_send_ack;
+        }
+        output_length = sizeof(output_header) + (size_t)output_header.payload_bytes;
+        if (output_metadata.level != 1 || output_header.sst_id != compaction_output_id ||
+            output_metadata.epoch != batch_header.epoch ||
+            output_metadata.min_key != message.metadata.min_key ||
+            output_metadata.max_key != message.metadata.max_key ||
+            slsm_sst_validate(output_buffer, output_length, compaction_output_id,
+                              batch_header.epoch, NULL) != 0 ||
+            slsm_sst_lookup(output_buffer, output_length, overlap_key, &lookup_value) != 0 ||
+            lookup_value != overlap_value) {
+            fprintf(stderr, "compaction output validation failed\n");
+            ack.phase = SLSM_PHASE_FETCH;
+            ack.generation = message.generation;
+            ack.status = -EBADMSG;
+            goto disconnect_send_ack;
+        }
+        input_metadata[0] = (struct slsm_sst_metadata){
+            .version = SLSM_METADATA_VERSION,
+            .level = 0,
+            .epoch = batch_header.epoch,
+            .min_key = input_headers[0].min_key,
+            .max_key = input_headers[0].max_key,
+        };
+        input_metadata[1] = (struct slsm_sst_metadata){
+            .version = SLSM_METADATA_VERSION,
+            .level = 0,
+            .epoch = batch_header.epoch,
+            .min_key = input_headers[1].min_key,
+            .max_key = input_headers[1].max_key,
+        };
+        make_local_descriptor(&message.descriptor, compaction_first_id, first_length,
+                              (const uint8_t *)buffer + first_offset,
+                              &input_descriptors[0]);
+        make_local_descriptor(&message.descriptor, compaction_second_id, second_length,
+                              (const uint8_t *)buffer + second_offset,
+                              &input_descriptors[1]);
+        make_local_descriptor(&message.descriptor, compaction_output_id, output_length,
+                              output_buffer, &output_descriptor);
+        manifest_status = slsm_manifest_publish(&manifest, &input_metadata[0],
+                                                &input_descriptors[0]);
+        if (manifest_status == 0) {
+            compaction_first_active = 1;
+            manifest_status = slsm_manifest_publish(&manifest, &input_metadata[1],
+                                                    &input_descriptors[1]);
+        }
+        if (manifest_status == 0) {
+            compaction_second_active = 1;
+            manifest_status = slsm_manifest_publish(&manifest, &output_metadata,
+                                                    &output_descriptor);
+        }
+        if (manifest_status != 0) {
+            ack.phase = SLSM_PHASE_FETCH;
+            ack.generation = message.generation;
+            ack.status = manifest_status;
+            goto disconnect_send_ack;
+        }
+        compaction_output_active = 1;
+        ack.phase = SLSM_PHASE_FETCH;
+        ack.generation = message.generation;
+        ack.status = 0;
+        ack.fetched_length = fetch_request.fetched_length;
+        ack.checksum = userspace_checksum;
+        ack.elapsed_us = fetch_request.elapsed_us;
+        ack.manifest_version = manifest.version;
+        ack.lookup_sst_id = compaction_output_id;
+        if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
+            perror("write compaction FETCH ack");
+            goto disconnect;
+        }
+        if (slsm_read_full(control_fd, &next, sizeof(next)) != 0) {
+            perror("read compaction COMMIT");
+            goto disconnect;
+        }
+        ack = (struct slsm_lifecycle_ack){
+            .magic = SLSM_CONTROL_MAGIC,
+            .version = SLSM_LIFECYCLE_VERSION,
+            .phase = SLSM_PHASE_COMMIT,
+            .generation = message.generation,
+        };
+        if (next.magic != SLSM_CONTROL_MAGIC ||
+            next.version != SLSM_LIFECYCLE_VERSION ||
+            next.phase != SLSM_PHASE_COMMIT ||
+            next.generation != message.generation ||
+            memcmp(&next.descriptor, &message.descriptor, sizeof(next.descriptor)) != 0 ||
+            memcmp(&next.metadata, &message.metadata, sizeof(next.metadata)) != 0) {
+            ack.status = -EPROTO;
+            if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0)
+                result = EXIT_FAILURE;
+            goto disconnect;
+        }
+        manifest_status = slsm_manifest_commit(&manifest, compaction_output_id,
+                                               batch_header.epoch);
+        lookup_entry = slsm_manifest_lookup(&manifest, output_metadata.min_key,
+                                            batch_header.epoch);
+        if (manifest_status != 0 || lookup_entry == NULL ||
+            lookup_entry->descriptor.sst_id != compaction_output_id) {
+            ack.status = manifest_status != 0 ? manifest_status : -EBADMSG;
+        } else {
+            ack.status = 0;
+            ack.manifest_version = manifest.version;
+            ack.lookup_sst_id = lookup_entry->descriptor.sst_id;
+            compaction_output_committed = 1;
+        }
+        if (slsm_write_full(control_fd, &ack, sizeof(ack)) != 0) {
+            perror("write compaction COMMIT ack");
+            goto disconnect;
+        }
+        if (ack.status != 0)
+            goto disconnect;
+        if (slsm_read_full(control_fd, &next, sizeof(next)) != 0) {
+            perror("read compaction REVOKE");
+            goto disconnect;
+        }
+        ack = (struct slsm_lifecycle_ack){
+            .magic = SLSM_CONTROL_MAGIC,
+            .version = SLSM_LIFECYCLE_VERSION,
+            .phase = SLSM_PHASE_REVOKE,
+            .generation = message.generation,
+        };
+        if (next.magic != SLSM_CONTROL_MAGIC ||
+            next.version != SLSM_LIFECYCLE_VERSION ||
+            next.phase != SLSM_PHASE_REVOKE ||
+            next.generation != message.generation ||
+            memcmp(&next.descriptor, &message.descriptor, sizeof(next.descriptor)) != 0 ||
+            memcmp(&next.metadata, &message.metadata, sizeof(next.metadata)) != 0) {
+            ack.status = -EPROTO;
+            goto revoke_ack;
+        }
+        manifest_status = slsm_manifest_abort(&manifest, compaction_first_id);
+        if (manifest_status == 0)
+            compaction_first_active = 0;
+        if (manifest_status == 0)
+            manifest_status = slsm_manifest_abort(&manifest, compaction_second_id);
+        if (manifest_status == 0)
+            compaction_second_active = 0;
+        lookup_entry = slsm_manifest_lookup(&manifest, output_metadata.min_key,
+                                            batch_header.epoch);
+        if (manifest_status != 0 || lookup_entry == NULL ||
+            lookup_entry->descriptor.sst_id != compaction_output_id) {
+            ack.status = manifest_status != 0 ? manifest_status : -EBADMSG;
+        } else {
+            ack.status = 0;
+            ack.manifest_version = manifest.version;
+            ack.lookup_sst_id = lookup_entry->descriptor.sst_id;
+            compaction_output_active = 0;
+        }
+        goto revoke_ack;
+    }
     if (fetch_request.fetched_length != message.descriptor.total_length ||
         fetch_request.checksum != message.descriptor.checksum ||
         userspace_checksum != message.descriptor.checksum ||
@@ -372,6 +630,18 @@ int main(int argc, char **argv)
         manifest_active = 0;
     }
 revoke_ack:
+    if (compaction) {
+        int cleanup_status = cleanup_compaction_manifest(
+            &manifest, compaction_first_id, compaction_second_id,
+            compaction_output_id, &compaction_first_active,
+            &compaction_second_active, &compaction_output_active,
+            compaction_output_committed);
+
+        if (cleanup_status != 0 && ack.status == 0) {
+            ack.status = cleanup_status;
+            result = EXIT_FAILURE;
+        }
+    }
     if (manifest_active) {
         int abort_status = slsm_manifest_abort(&manifest, message.descriptor.sst_id);
 
@@ -402,6 +672,16 @@ revoke_ack:
         result = EXIT_SUCCESS;
 
 disconnect:
+    if (compaction) {
+        int cleanup_status = cleanup_compaction_manifest(
+            &manifest, compaction_first_id, compaction_second_id,
+            compaction_output_id, &compaction_first_active,
+            &compaction_second_active, &compaction_output_active,
+            compaction_output_committed);
+
+        if (cleanup_status != 0)
+            result = EXIT_FAILURE;
+    }
     if (manifest_active) {
         int abort_status = slsm_manifest_abort(&manifest, message.descriptor.sst_id);
 
@@ -420,6 +700,18 @@ disconnect:
     goto print_result;
 
 disconnect_send_ack:
+    if (compaction) {
+        int cleanup_status = cleanup_compaction_manifest(
+            &manifest, compaction_first_id, compaction_second_id,
+            compaction_output_id, &compaction_first_active,
+            &compaction_second_active, &compaction_output_active,
+            compaction_output_committed);
+
+        if (cleanup_status != 0 && ack.status == 0) {
+            ack.status = cleanup_status;
+            result = EXIT_FAILURE;
+        }
+    }
     if (connected && ioctl(device_fd, SLSM_IOCTL_DISCONNECT, 0) != 0) {
         perror("SLSM_IOCTL_DISCONNECT");
         result = EXIT_FAILURE;
@@ -432,6 +724,21 @@ send_ack:
     }
 print_result:
     if (result == EXIT_SUCCESS) {
+        if (compaction) {
+            printf("{\"event\":\"stage5_result\",\"role\":\"sn\",\"status\":\"pass\","
+                   "\"mode\":\"compaction\",\"lifecycle\":"
+                   "\"publish-fetch-commit-revoke\",\"input_sst_ids\":[%" PRIu64
+                   ",%" PRIu64 "],\"output_sst_id\":%" PRIu64
+                   ",\"output_level\":%u,\"output_records\":%u,"
+                   "\"overlap_key\":%" PRIu64 ",\"overlap_value\":%" PRIu64
+                   ",\"bytes\":%" PRIu64 ",\"elapsed_us\":%" PRIu64
+                   ",\"manifest_version\":%" PRIu64 "}\n",
+                   compaction_first_id, compaction_second_id, compaction_output_id,
+                   output_metadata.level, output_header.record_count, overlap_key,
+                   overlap_value, fetch_request.fetched_length,
+                   fetch_request.elapsed_us, manifest.version);
+            goto out;
+        }
         printf("{\"event\":\"stage4_result\",\"role\":\"sn\",\"status\":\"pass\","
                "\"lifecycle\":\"publish-fetch-commit-revoke\",\"generation\":%" PRIu64
                ",\"sst_id\":%" PRIu64 ",\"bytes\":%" PRIu64 ",\"chunks\":%u,"
@@ -448,7 +755,8 @@ out:
     if (device_fd >= 0)
         close(device_fd);
     if (control_fd >= 0)
-        close(control_fd);
+    close(control_fd);
+    free(output_buffer);
     free(buffer);
     return result;
 }
