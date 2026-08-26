@@ -1,62 +1,45 @@
-# FaaScale SPD Guest Smoke Preparation
+# FaaScale SPD Guest Single-GPU Smoke
 
-Date: 2026-08-25
+Date: 2026-08-26
 
-## Scope
+## Result
 
-This is a baseline reproduction setup for FaaScale/LambdaScale on one SPD
-Guest. It is deliberately single-node, single-GPU, non-RDMA, and isolated from
-the existing BlitzScale and SPD processes. The target is one real prompt that
-returns generated text; this note records preparation only and does not claim
-that token generation has completed.
+FaaScale completed a minimal isolated inference smoke on the gpu02 SPD Guest.
+The run was single-node, single-L20, and non-RDMA; it did not use gpu01 or
+modify the existing BlitzScale/SPD processes.
 
-## Source and runtime
+- Source revision: `9db210fcb6979f7c1f73f9819a77e0edb6c5e343`
+- Isolated container: `faascale-smoke-gpu02-20260826`
+- Model input: the author-provided raw pre-blocked
+  `jcbjcc/llama-2-7b`, eight blocks totaling `13,476,831,232` bytes
+- Model load completed at `06:28:52`; observed GPU memory was `17,749 MiB`
+- Prompt: `I believe the meaning of life is`
+- Generation limit: 8 tokens
+- TTFT: `30.6 ms`
+- Complete request latency: `244.4 ms`
+- Worker normal-execute time: `241.6 ms`
 
-- Upstream repository: `https://github.com/lambda-scale/lambda-scale.git`
-- Observed source revision: `9db210f`
-- Runtime copy: Guest-local isolated experiment directory (the upstream
-  checkout was not modified)
-- Existing image reused: `blitzscale:spd-l20-runtime-20260824`
-- Guest venv packages supplied through `PYTHONPATH`; CUDA driver libraries and
-  only the assigned L20 device are exposed to the new container.
-- No RDMA device or InfiniBand sysfs tree is mounted for this smoke.
+The final `FAASCALE_GENERATED_TEXT[...]` marker contained eight unknown-glyph
+tokens. This proves that the FaaScale execution path loaded the model and
+generated eight tokens, but it does not validate output quality. Tokenizer and
+weight compatibility remains an unresolved limitation.
 
-## Runtime-only adjustments
+## Isolated adjustments
 
-The isolated copy contains only the changes needed for a one-GPU smoke:
+The smoke used only minimal changes in the isolated runtime copy:
 
-1. Replace two non-RDMA `warm_up(2)` calls with `warm_up(total_gpu_num)`.
-2. Preserve decoded LLM text in the returned intermediate result and print a
-   `FAASCALE_GENERATED_TEXT[...]` marker at the controller.
-3. Set the first-run generation limit to 8 tokens.
-4. Set `total_node_num=1`, `total_gpu_num=1`, `is_rdma=False`,
-   `model_name=llama-2-7b`, and a one-entry local node configuration.
+1. Change the single-GPU warm-up call to `warm_up(total_gpu_num)`.
+2. Call `set_start_method(..., force=True)` for repeatable startup.
+3. Set `max_gen_len=8`.
+4. Capture generated text with `tokenizer.decode(toks)` and test membership in
+   `output.tensors` before emitting the output marker.
 
-The model storage directory is an isolated runtime directory. It is currently
-empty because the eight author-provided `jcbjcc/llama-2-7b` `.pth` shards have
-not yet been placed on the Guest.
+The first observer-hook attempt raised a `KeyError`. It was discarded, and the
+smoke was rerun cleanly; no number from that attempt is used above.
 
-## Checks completed
+## Evidence boundary
 
-- Assigned L20 was idle before and after setup.
-- CUDA/PyTorch canary in the new container: one L20 visible and usable.
-- FaaScale dependencies imported successfully: PyTorch `2.5.1+cu121`,
-  pyzmq `25.1.1`, Transformers `4.42.0`, FairScale `0.4.13`, and the compiled
-  `ipc_p2p` extension.
-- Manager-only check opened its execute/transfer listeners on ports 8000 and
-  9000, then exited cleanly; those ports are free again.
-- No FaaScale worker, model loader, or inference request was started.
-- Existing BlitzScale containers and SPD processes were not stopped or
-  modified.
-
-## Blocker and next gate
-
-The requested token smoke cannot be run until all eight `.pth` shards are
-available in the isolated model-storage directory. Once present, the remaining
-sequence is: start the new worker, start the manager, send `Start` and
-`DeployModel`, wait for block loading, send one short prompt, capture the
-`FAASCALE_GENERATED_TEXT[...]` line and timing, then remove only the new
-FaaScale container.
-
-Until that gate passes, this setup must be reported as **prepared/blocked on
-model input**, not as a successful FaaScale inference reproduction.
+This result is a functional one-GPU token-generation gate, not a performance
+benchmark. It does not validate model quality, RDMA/GDR transport, distributed
+execution, or comparison against BlitzScale/SPD. No RDMA device was exposed to
+the isolated container.
