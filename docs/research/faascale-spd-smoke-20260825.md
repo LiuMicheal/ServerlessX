@@ -24,6 +24,17 @@ tokens. This proves that the FaaScale execution path loaded the model and
 generated eight tokens, but it does not validate output quality. Tokenizer and
 weight compatibility remains an unresolved limitation.
 
+## Token correctness check
+
+A follow-up run printed the generated IDs: `[[0, 0, 0, 0, 0, 0, 0, 0]]`.
+The Guest-local tokenizer has a 32,000-entry vocabulary, encodes the prompt as
+`[1, 306, 4658, 278, 6593, 310, 2834, 338]`, and decodes ID `0` as `⁇`.
+Therefore the glyphs are not a terminal display artifact: the loaded model
+actually selected ID 0 at every generated step. The tokenizer file matches the
+downloaded input by SHA-256, so the remaining issue is likely the raw weight
+block format, model parameter/layout compatibility, or the FaaScale commit;
+this smoke is not a valid quality baseline until that is resolved.
+
 ## Isolated adjustments
 
 The smoke used only minimal changes in the isolated runtime copy:
